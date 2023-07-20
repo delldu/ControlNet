@@ -3,6 +3,7 @@
 import torch
 import numpy as np
 from tqdm import tqdm
+import pdb
 
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like, extract_into_tensor
 
@@ -10,8 +11,9 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 class DDIMSampler(object):
     def __init__(self, model, schedule="linear", **kwargs):
         super().__init__()
+        # kwargs = {}
         self.model = model
-        self.ddpm_num_timesteps = model.num_timesteps
+        self.ddpm_num_timesteps = model.num_timesteps # 1000
         self.schedule = schedule
 
     def register_buffer(self, name, attr):
@@ -23,7 +25,8 @@ class DDIMSampler(object):
     def make_schedule(self, ddim_num_steps, ddim_discretize="uniform", ddim_eta=0., verbose=True):
         self.ddim_timesteps = make_ddim_timesteps(ddim_discr_method=ddim_discretize, num_ddim_timesteps=ddim_num_steps,
                                                   num_ddpm_timesteps=self.ddpm_num_timesteps,verbose=verbose)
-        alphas_cumprod = self.model.alphas_cumprod
+        # len(self.ddim_timesteps) -- 20
+        alphas_cumprod = self.model.alphas_cumprod #
         assert alphas_cumprod.shape[0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
         to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.model.device)
 
@@ -77,7 +80,15 @@ class DDIMSampler(object):
                ucg_schedule=None,
                **kwargs
                ):
-        if conditioning is not None:
+
+        # S = 20
+        # batch_size = 1
+        # shape = (4, 80, 64)
+        # verbose = False
+        # unconditional_guidance_scale = 9
+        # kwargs = {}
+
+        if conditioning is not None: # True, conditioning.keys() -- ['c_concat', 'c_crossattn']
             if isinstance(conditioning, dict):
                 ctmp = conditioning[list(conditioning.keys())[0]]
                 while isinstance(ctmp, list): ctmp = ctmp[0]
@@ -98,25 +109,26 @@ class DDIMSampler(object):
         # sampling
         C, H, W = shape
         size = (batch_size, C, H, W)
-        print(f'Data shape for DDIM sampling is {size}, eta {eta}')
+        print(f'Data shape for DDIM sampling is {size}, eta {eta}') # (1, 4, 96, 64), eta 0.0
 
         samples, intermediates = self.ddim_sampling(conditioning, size,
-                                                    callback=callback,
-                                                    img_callback=img_callback,
-                                                    quantize_denoised=quantize_x0,
-                                                    mask=mask, x0=x0,
+                                                    callback=callback, # None
+                                                    img_callback=img_callback, # None
+                                                    quantize_denoised=quantize_x0, # False
+                                                    mask=mask, x0=x0, # mask -- None, x0 -- None
                                                     ddim_use_original_steps=False,
                                                     noise_dropout=noise_dropout,
-                                                    temperature=temperature,
-                                                    score_corrector=score_corrector,
-                                                    corrector_kwargs=corrector_kwargs,
-                                                    x_T=x_T,
-                                                    log_every_t=log_every_t,
-                                                    unconditional_guidance_scale=unconditional_guidance_scale,
+                                                    temperature=temperature, # 1.0
+                                                    score_corrector=score_corrector, # None
+                                                    corrector_kwargs=corrector_kwargs, # None
+                                                    x_T=x_T, # None
+                                                    log_every_t=log_every_t, # 100
+                                                    unconditional_guidance_scale=unconditional_guidance_scale, # 9
                                                     unconditional_conditioning=unconditional_conditioning,
-                                                    dynamic_threshold=dynamic_threshold,
-                                                    ucg_schedule=ucg_schedule
+                                                    dynamic_threshold=dynamic_threshold, # None
+                                                    ucg_schedule=ucg_schedule # None
                                                     )
+        # samples.size() -- [1, 4, 80, 64]
         return samples, intermediates
 
     @torch.no_grad()
@@ -186,12 +198,12 @@ class DDIMSampler(object):
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             model_output = self.model.apply_model(x, t, c)
-        else:
+        else: # True
             model_t = self.model.apply_model(x, t, c)
             model_uncond = self.model.apply_model(x, t, unconditional_conditioning)
             model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
 
-        if self.model.parameterization == "v":
+        if self.model.parameterization == "v": # False self.model.parameterization -- 'eps'
             e_t = self.model.predict_eps_from_z_and_v(x, t, model_output)
         else:
             e_t = model_output
@@ -216,7 +228,7 @@ class DDIMSampler(object):
         else:
             pred_x0 = self.model.predict_start_from_z_and_v(x, t, model_output)
 
-        if quantize_denoised:
+        if quantize_denoised: # False
             pred_x0, _, *_ = self.model.first_stage_model.quantize(pred_x0)
 
         if dynamic_threshold is not None:

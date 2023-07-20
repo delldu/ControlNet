@@ -2,6 +2,7 @@ import einops
 import torch
 import torch as th
 import torch.nn as nn
+import pdb
 
 from ldm.modules.diffusionmodules.util import (
     conv_nd,
@@ -17,10 +18,13 @@ from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSeq
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import log_txt_as_img, exists, instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
-
+import pdb
 
 class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
+        # only_mid_control = False
+        # kwargs = {}
+
         hs = []
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
@@ -31,10 +35,10 @@ class ControlledUnetModel(UNetModel):
                 hs.append(h)
             h = self.middle_block(h, emb, context)
 
-        if control is not None:
+        if control is not None: # True
             h += control.pop()
 
-        for i, module in enumerate(self.output_blocks):
+        for i, module in enumerate(self.output_blocks): # len(self.output_blocks) -- 12
             if only_mid_control or control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
             else:
@@ -277,6 +281,8 @@ class ControlNet(nn.Module):
         )
         self.middle_block_out = self.make_zero_conv(ch)
         self._feature_size += ch
+
+        pdb.set_trace()
 
     def make_zero_conv(self, channels):
         return TimestepEmbedSequential(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))

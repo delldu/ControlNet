@@ -14,25 +14,38 @@ from annotator.canny import CannyDetector
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
 
+import pdb
+
 apply_canny = CannyDetector()
 model = create_model('./models/cldm_v15.yaml').cpu()
 model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', location='cpu'), strict=False)
-
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
+
+# model -- ControlLDM(...),
+# model.model -- DiffusionWrapper(...)
+# model.first_stage_model -- AutoencoderKL(...)
+# model.cond_stage_model -- FrozenCLIPEmbedder(...)
+# model.control_model -- ControlNet(...)
+
+# model.to_torchscript()
+# torch.jit.script(model.control_model) -- Unknown type name 'TimestepBlock'
+
+# ddim_sampler -- <cldm.ddim_hacked.DDIMSampler object>
 
 
 def process(input_image, prompt, a_prompt, n_prompt, num_samples, image_resolution, ddim_steps, guess_mode, strength, scale, seed, eta, low_threshold, high_threshold):
     with torch.no_grad():
-        img = resize_image(HWC3(input_image), image_resolution)
+        img = resize_image(HWC3(input_image), image_resolution) # input_image.shape -- (600, 458, 3), dtype=uint8
+
         H, W, C = img.shape
 
         detected_map = apply_canny(img, low_threshold, high_threshold)
-        detected_map = HWC3(detected_map)
+        detected_map = HWC3(detected_map) # (640, 512, 3), dtype=uint8
 
         control = torch.from_numpy(detected_map.copy()).float().cuda() / 255.0
         control = torch.stack([control for _ in range(num_samples)], dim=0)
-        control = einops.rearrange(control, 'b h w c -> b c h w').clone()
+        control = einops.rearrange(control, 'b h w c -> b c h w').clone() # size() -- [1, 3, 640, 512]
 
         if seed == -1:
             seed = random.randint(0, 65535)
@@ -53,10 +66,12 @@ def process(input_image, prompt, a_prompt, n_prompt, num_samples, image_resoluti
                                                      shape, cond, verbose=False, eta=eta,
                                                      unconditional_guidance_scale=scale,
                                                      unconditional_conditioning=un_cond)
-
+        # samples.size() -- [1, 4, 80, 64]
+        # intermediates.keys() -- ['x_inter', 'pred_x0']
         if config.save_memory:
             model.low_vram_shift(is_diffusing=False)
 
+        # torch.jit.script(model.decode_first_stage) ==> ?
         x_samples = model.decode_first_stage(samples)
         x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c') * 127.5 + 127.5).cpu().numpy().clip(0, 255).astype(np.uint8)
 
