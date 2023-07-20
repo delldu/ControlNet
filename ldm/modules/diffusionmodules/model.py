@@ -7,6 +7,7 @@ from einops import rearrange
 from typing import Optional, Any
 
 from ldm.modules.attention import MemoryEfficientCrossAttention
+import pdb
 
 try:
     import xformers
@@ -80,7 +81,7 @@ class Downsample(nn.Module):
     def forward(self, x):
         if self.with_conv:
             pad = (0,1,0,1)
-            x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+            x = torch.nn.functional.pad(x, pad, mode="constant", value=0.0)
             x = self.conv(x)
         else:
             x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
@@ -115,6 +116,11 @@ class ResnetBlock(nn.Module):
                                      kernel_size=3,
                                      stride=1,
                                      padding=1)
+
+        # To support torch.jit.script
+        self.conv_shortcut = nn.Identity()
+        self.nin_shortcut = nn.Identity()
+
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
                 self.conv_shortcut = torch.nn.Conv2d(in_channels,
@@ -248,7 +254,7 @@ class MemoryEfficientAttnBlock(nn.Module):
 
         # compute attention
         B, C, H, W = q.shape
-        q, k, v = map(lambda x: rearrange(x, 'b c h w -> b (h w) c'), (q, k, v))
+        q, k, v = map(lambda x: rearrange(x, 'b c h w -> b (h w) c'), (q, k, v)) # xxxx8888
 
         q, k, v = map(
             lambda t: t.unsqueeze(3)
@@ -552,6 +558,16 @@ class Decoder(nn.Module):
                  resolution, z_channels, give_pre_end=False, tanh_out=False, use_linear_attn=False,
                  attn_type="vanilla", **ignorekwargs):
         super().__init__()
+        # ch = 128
+        # out_ch = 3
+        # ch_mult = [1, 2, 4, 4]
+        # num_res_blocks = 2
+        # attn_resolutions = []
+        # in_channels = 3
+        # resolution = 256
+        # z_channels = 4
+        # ignorekwargs = {'double_z': True}
+
         if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = 0
@@ -591,7 +607,7 @@ class Decoder(nn.Module):
 
         # upsampling
         self.up = nn.ModuleList()
-        for i_level in reversed(range(self.num_resolutions)):
+        for i_level in reversed(range(self.num_resolutions)): # self.num_resolutions -- 4
             block = nn.ModuleList()
             attn = nn.ModuleList()
             block_out = ch*ch_mult[i_level]
@@ -618,7 +634,6 @@ class Decoder(nn.Module):
                                         kernel_size=3,
                                         stride=1,
                                         padding=1)
-
     def forward(self, z):
         #assert z.shape[1:] == self.z_shape[1:]
         self.last_z_shape = z.shape
@@ -635,8 +650,8 @@ class Decoder(nn.Module):
         h = self.mid.block_2(h, temb)
 
         # upsampling
-        for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks+1):
+        for i_level in reversed(range(self.num_resolutions)): # self.num_resolutions -- 4
+            for i_block in range(self.num_res_blocks+1): # self.num_res_blocks -- 2
                 h = self.up[i_level].block[i_block](h, temb)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h)
@@ -644,13 +659,13 @@ class Decoder(nn.Module):
                 h = self.up[i_level].upsample(h)
 
         # end
-        if self.give_pre_end:
+        if self.give_pre_end: # False
             return h
 
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
-        if self.tanh_out:
+        if self.tanh_out: # False
             h = torch.tanh(h)
         return h
 

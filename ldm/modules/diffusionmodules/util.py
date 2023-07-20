@@ -110,12 +110,12 @@ def checkpoint(func, inputs, params, flag):
     :param flag: if False, disable gradient checkpointing.
     """
     if flag:
-        args = tuple(inputs) + tuple(params)
+        args = tuple(inputs) + tuple(params) # xxxx8888
         return CheckpointFunction.apply(func, len(inputs), *args)
     else:
         return func(*inputs)
 
-
+# xxxx8888
 class CheckpointFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, run_function, length, *args):
@@ -205,7 +205,7 @@ def normalization(channels):
     :param channels: number of input channels.
     :return: an nn.Module for normalization.
     """
-    return nn.GroupNorm(32, channels) # xxxx8888 GroupNorm32(32, channels)
+    return nn.GroupNorm(32, channels) # GroupNorm32(32, channels)
 
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
@@ -213,7 +213,6 @@ class SiLU(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-# xxxx8888
 # class GroupNorm32(nn.GroupNorm):
 #     def forward(self, x):
 #         return super().forward(x.float()).type(x.dtype) # torch.jit.script does not support !!!

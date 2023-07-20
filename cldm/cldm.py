@@ -59,7 +59,7 @@ class ControlNet(nn.Module):
             hint_channels = 3,
             num_res_blocks = 2,
             attention_resolutions = [4, 2, 1],
-            dropout=0,
+            dropout=0.0,
             channel_mult=[1, 2, 4, 4],
             conv_resample=True,
             dims=2,

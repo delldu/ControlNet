@@ -99,8 +99,8 @@ class FrozenCLIPEmbedder(AbstractEncoder):
         # layer_idx = None
 
         assert layer in self.LAYERS
-        self.tokenizer = CLIPTokenizer.from_pretrained(version)
-        self.transformer = CLIPTextModel.from_pretrained(version)
+        self.tokenizer = CLIPTokenizer.from_pretrained(version) # # xxxx8888
+        self.transformer = CLIPTextModel.from_pretrained(version) # xxxx8888
         self.device = device
         self.max_length = max_length
         if freeze: # True

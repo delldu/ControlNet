@@ -184,7 +184,7 @@ class ResBlock(TimestepBlock):
         use_conv=False,
         use_scale_shift_norm=False,
         dims=2,
-        use_checkpoint=False,
+        use_checkpoint=True,
         up=False,
         down=False,
     ):
@@ -192,7 +192,6 @@ class ResBlock(TimestepBlock):
         # channels = 320
         # emb_channels = 1280
         # out_channels = 320
-        # use_checkpoint = True
 
         self.channels = channels
         self.emb_channels = emb_channels
@@ -244,6 +243,7 @@ class ResBlock(TimestepBlock):
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
+
     def forward(self, x, emb):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
@@ -253,7 +253,7 @@ class ResBlock(TimestepBlock):
         """
         return checkpoint(
             self._forward, (x, emb), self.parameters(), self.use_checkpoint
-        )
+        ) # xxxx8888
 
 
     def _forward(self, x, emb):
@@ -452,7 +452,7 @@ class UNetModel(nn.Module):
         out_channels,
         num_res_blocks,
         attention_resolutions,
-        dropout=0,
+        dropout=0.0,
         channel_mult=(1, 2, 4, 8),
         conv_resample=True,
         dims=2,

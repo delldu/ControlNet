@@ -11,6 +11,7 @@ from ldm.modules.ema import LitEma
 
 import pdb
 
+# xxxx8888
 class AutoencoderKL(pl.LightningModule):
     def __init__(self,
                  ddconfig,
