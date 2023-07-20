@@ -28,8 +28,11 @@ ddim_sampler = DDIMSampler(model)
 # model.cond_stage_model -- FrozenCLIPEmbedder(...)
 # model.control_model -- ControlNet(...)
 
-# model.to_torchscript()
+# model.model.to_torchscript()
+# model.first_stage_model.to_torchscript()
+# torch.jit.script(model.cond_stage_model)
 # torch.jit.script(model.control_model) -- Unknown type name 'TimestepBlock'
+# pdb.set_trace()
 
 # ddim_sampler -- <cldm.ddim_hacked.DDIMSampler object>
 

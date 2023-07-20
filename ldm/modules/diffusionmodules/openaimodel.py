@@ -17,7 +17,7 @@ from ldm.modules.diffusionmodules.util import (
 )
 from ldm.modules.attention import SpatialTransformer
 from ldm.util import exists
-
+import pdb
 
 # dummy replace
 def convert_module_to_f16(x):
@@ -69,7 +69,7 @@ class TimestepBlock(nn.Module):
         Apply the module to `x` given `emb` timestep embeddings.
         """
 
-
+# xxxx8888
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     """
     A sequential module that passes timestep embeddings to the children that
@@ -78,12 +78,12 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
     def forward(self, x, emb, context=None):
         for layer in self:
-            if isinstance(layer, TimestepBlock):
+            if isinstance(layer, TimestepBlock): # 'ldm.modules.diffusionmodules.openaimodel.ResBlock' -- TimestepBlock
                 x = layer(x, emb)
-            elif isinstance(layer, SpatialTransformer):
+            elif isinstance(layer, SpatialTransformer): # 'ldm.modules.attention.SpatialTransformer'
                 x = layer(x, context)
             else:
-                x = layer(x)
+                x = layer(x) # 'torch.nn.modules.conv.Conv2d' ...
         return x
 
 
@@ -189,6 +189,11 @@ class ResBlock(TimestepBlock):
         down=False,
     ):
         super().__init__()
+        # channels = 320
+        # emb_channels = 1280
+        # out_channels = 320
+        # use_checkpoint = True
+
         self.channels = channels
         self.emb_channels = emb_channels
         self.dropout = dropout
@@ -232,7 +237,7 @@ class ResBlock(TimestepBlock):
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
-        elif use_conv:
+        elif use_conv: # False
             self.skip_connection = conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
             )

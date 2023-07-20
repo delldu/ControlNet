@@ -205,7 +205,7 @@ def normalization(channels):
     :param channels: number of input channels.
     :return: an nn.Module for normalization.
     """
-    return GroupNorm32(32, channels)
+    return nn.GroupNorm(32, channels) # xxxx8888 GroupNorm32(32, channels)
 
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
@@ -213,10 +213,10 @@ class SiLU(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-
-class GroupNorm32(nn.GroupNorm):
-    def forward(self, x):
-        return super().forward(x.float()).type(x.dtype)
+# xxxx8888
+# class GroupNorm32(nn.GroupNorm):
+#     def forward(self, x):
+#         return super().forward(x.float()).type(x.dtype) # torch.jit.script does not support !!!
 
 def conv_nd(dims, *args, **kwargs):
     """

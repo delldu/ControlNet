@@ -105,6 +105,9 @@ class ResnetBlock(nn.Module):
         if temb_channels > 0:
             self.temb_proj = torch.nn.Linear(temb_channels,
                                              out_channels)
+        else: # support torch.jit.script
+            self.temb_proj = nn.Identity()
+
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = torch.nn.Conv2d(out_channels,

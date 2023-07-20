@@ -6,7 +6,7 @@ from transformers import T5Tokenizer, T5EncoderModel, CLIPTokenizer, CLIPTextMod
 
 import open_clip
 from ldm.util import default, count_params
-
+import pdb
 
 class AbstractEncoder(nn.Module):
     def __init__(self):
@@ -95,16 +95,19 @@ class FrozenCLIPEmbedder(AbstractEncoder):
     def __init__(self, version="openai/clip-vit-large-patch14", device="cuda", max_length=77,
                  freeze=True, layer="last", layer_idx=None):  # clip-vit-base-patch32
         super().__init__()
+        # layer = 'last'
+        # layer_idx = None
+
         assert layer in self.LAYERS
         self.tokenizer = CLIPTokenizer.from_pretrained(version)
         self.transformer = CLIPTextModel.from_pretrained(version)
         self.device = device
         self.max_length = max_length
-        if freeze:
+        if freeze: # True
             self.freeze()
         self.layer = layer
         self.layer_idx = layer_idx
-        if layer == "hidden":
+        if layer == "hidden": # False
             assert layer_idx is not None
             assert 0 <= abs(layer_idx) <= 12
 
@@ -119,7 +122,7 @@ class FrozenCLIPEmbedder(AbstractEncoder):
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
         tokens = batch_encoding["input_ids"].to(self.device)
         outputs = self.transformer(input_ids=tokens, output_hidden_states=self.layer=="hidden")
-        if self.layer == "last":
+        if self.layer == "last": # True
             z = outputs.last_hidden_state
         elif self.layer == "pooled":
             z = outputs.pooler_output[:, None, :]
