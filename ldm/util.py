@@ -8,40 +8,40 @@ from inspect import isfunction
 from PIL import Image, ImageDraw, ImageFont
 import pdb
 
-def log_txt_as_img(wh, xc, size=10):
-    # wh a tuple of (width, height)
-    # xc a list of captions to plot
-    b = len(xc)
-    txts = list()
-    for bi in range(b):
-        txt = Image.new("RGB", wh, color="white")
-        draw = ImageDraw.Draw(txt)
-        font = ImageFont.truetype('font/DejaVuSans.ttf', size=size)
-        nc = int(40 * (wh[0] / 256))
-        lines = "\n".join(xc[bi][start:start + nc] for start in range(0, len(xc[bi]), nc))
+# def log_txt_as_img(wh, xc, size=10):
+#     # wh a tuple of (width, height)
+#     # xc a list of captions to plot
+#     b = len(xc)
+#     txts = list()
+#     for bi in range(b):
+#         txt = Image.new("RGB", wh, color="white")
+#         draw = ImageDraw.Draw(txt)
+#         font = ImageFont.truetype('font/DejaVuSans.ttf', size=size)
+#         nc = int(40 * (wh[0] / 256))
+#         lines = "\n".join(xc[bi][start:start + nc] for start in range(0, len(xc[bi]), nc))
 
-        try:
-            draw.text((0, 0), lines, fill="black", font=font)
-        except UnicodeEncodeError:
-            print("Cant encode string for logging. Skipping.")
+#         try:
+#             draw.text((0, 0), lines, fill="black", font=font)
+#         except UnicodeEncodeError:
+#             print("Cant encode string for logging. Skipping.")
 
-        txt = np.array(txt).transpose(2, 0, 1) / 127.5 - 1.0
-        txts.append(txt)
-    txts = np.stack(txts)
-    txts = torch.tensor(txts)
-    return txts
-
-
-def ismap(x):
-    if not isinstance(x, torch.Tensor):
-        return False
-    return (len(x.shape) == 4) and (x.shape[1] > 3)
+#         txt = np.array(txt).transpose(2, 0, 1) / 127.5 - 1.0
+#         txts.append(txt)
+#     txts = np.stack(txts)
+#     txts = torch.tensor(txts)
+#     return txts
 
 
-def isimage(x):
-    if not isinstance(x,torch.Tensor):
-        return False
-    return (len(x.shape) == 4) and (x.shape[1] == 3 or x.shape[1] == 1)
+# def ismap(x):
+#     if not isinstance(x, torch.Tensor):
+#         return False
+#     return (len(x.shape) == 4) and (x.shape[1] > 3)
+
+
+# def isimage(x):
+#     if not isinstance(x,torch.Tensor):
+#         return False
+#     return (len(x.shape) == 4) and (x.shape[1] == 3 or x.shape[1] == 1)
 
 
 def exists(x):
@@ -54,12 +54,12 @@ def default(val, d):
     return d() if isfunction(d) else d
 
 
-def mean_flat(tensor):
-    """
-    https://github.com/openai/guided-diffusion/blob/27c20a8fab9cb472df5d6bdd6c8d11c8f430b924/guided_diffusion/nn.py#L86
-    Take the mean over all non-batch dimensions.
-    """
-    return tensor.mean(dim=list(range(1, len(tensor.shape))))
+# def mean_flat(tensor):
+#     """
+#     https://github.com/openai/guided-diffusion/blob/27c20a8fab9cb472df5d6bdd6c8d11c8f430b924/guided_diffusion/nn.py#L86
+#     Take the mean over all non-batch dimensions.
+#     """
+#     return tensor.mean(dim=list(range(1, len(tensor.shape))))
 
 
 def count_params(model, verbose=False):

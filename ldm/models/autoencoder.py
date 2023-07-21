@@ -216,13 +216,13 @@ class AutoencoderKL(torch.nn.Module): # torch.nn.Module, pl.LightningModule
 
     #     return log
 
-    def to_rgb(self, x):
-        assert self.image_key == "segmentation"
-        if not hasattr(self, "colorize"):
-            self.register_buffer("colorize", torch.randn(3, x.shape[1], 1, 1).to(x))
-        x = F.conv2d(x, weight=self.colorize)
-        x = 2.*(x-x.min())/(x.max()-x.min()) - 1.
-        return x
+    # def to_rgb(self, x):
+    #     assert self.image_key == "segmentation"
+    #     if not hasattr(self, "colorize"):
+    #         self.register_buffer("colorize", torch.randn(3, x.shape[1], 1, 1).to(x))
+    #     x = F.conv2d(x, weight=self.colorize)
+    #     x = 2.*(x-x.min())/(x.max()-x.min()) - 1.
+    #     return x
 
 
 # class IdentityFirstStage(torch.nn.Module):

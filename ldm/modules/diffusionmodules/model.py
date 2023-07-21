@@ -859,25 +859,25 @@ class Decoder(nn.Module):
 #         return x
 
 
-class Resize(nn.Module):
-    def __init__(self, in_channels=None, learned=False, mode="bilinear"):
-        super().__init__()
-        self.with_conv = learned
-        self.mode = mode
-        if self.with_conv:
-            print(f"Note: {self.__class__.__name} uses learned downsampling and will ignore the fixed {mode} mode")
-            raise NotImplementedError()
-            assert in_channels is not None
-            # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv2d(in_channels,
-                                        in_channels,
-                                        kernel_size=4,
-                                        stride=2,
-                                        padding=1)
+# class Resize(nn.Module):
+#     def __init__(self, in_channels=None, learned=False, mode="bilinear"):
+#         super().__init__()
+#         self.with_conv = learned
+#         self.mode = mode
+#         if self.with_conv:
+#             print(f"Note: {self.__class__.__name} uses learned downsampling and will ignore the fixed {mode} mode")
+#             raise NotImplementedError()
+#             assert in_channels is not None
+#             # no asymmetric padding in torch conv, must do it ourselves
+#             self.conv = torch.nn.Conv2d(in_channels,
+#                                         in_channels,
+#                                         kernel_size=4,
+#                                         stride=2,
+#                                         padding=1)
 
-    def forward(self, x, scale_factor=1.0):
-        if scale_factor==1.0:
-            return x
-        else:
-            x = torch.nn.functional.interpolate(x, mode=self.mode, align_corners=False, scale_factor=scale_factor)
-        return x
+#     def forward(self, x, scale_factor=1.0):
+#         if scale_factor==1.0:
+#             return x
+#         else:
+#             x = torch.nn.functional.interpolate(x, mode=self.mode, align_corners=False, scale_factor=scale_factor)
+#         return x

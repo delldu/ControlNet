@@ -1,6 +1,6 @@
 import einops
 import torch
-import torch as th
+# import torch as th
 import torch.nn as nn
 import pdb
 
@@ -12,14 +12,16 @@ from ldm.modules.diffusionmodules.util import (
 )
 
 from einops import rearrange, repeat
-from torchvision.utils import make_grid
+# from torchvision.utils import make_grid
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     CreateTimestepEmbedSequential, TimestepEmbedSequential, TimestepEmbedSequentialForNormal, TimestepEmbedSequentialForTimestepBlock, TimestepEmbedSequentialForSpatialTransformer, \
     ResBlock, Downsample, AttentionBlock
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.util import log_txt_as_img, exists, instantiate_from_config
-from ldm.models.diffusion.ddim import DDIMSampler
+# from ldm.util import log_txt_as_img, exists, instantiate_from_config
+from ldm.util import exists, instantiate_from_config
+
+# from ldm.models.diffusion.ddim import DDIMSampler
 import pdb
 
 class ControlledUnetModel(UNetModel):
@@ -130,7 +132,7 @@ class ControlNet(nn.Module):
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
         self.use_checkpoint = use_checkpoint
-        self.dtype = th.float16 if use_fp16 else th.float32
+        self.dtype = torch.float16 if use_fp16 else torch.float32
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
@@ -376,7 +378,7 @@ class ControlNet(nn.Module):
 
 
 # xxxx1111, start root ...
-class ControlLDM(LatentDiffusion):
+class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
     def __init__(self, control_stage_config, control_key, only_mid_control, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.control_model = instantiate_from_config(control_stage_config)
