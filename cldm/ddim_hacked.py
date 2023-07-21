@@ -11,7 +11,6 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 class DDIMSampler(object):
     def __init__(self, model):
         super().__init__()
-        # kwargs = {}
         self.model = model # model -- ControlLDM()
         self.ddpm_num_timesteps = model.num_timesteps # 1000
 

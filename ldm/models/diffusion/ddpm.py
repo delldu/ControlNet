@@ -137,23 +137,23 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
                 extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
         )
 
-    # xxxx1111 ????
-    def predict_start_from_z_and_v(self, x_t, t, v):
-        pdb.set_trace()
-        # self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
-        # self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
-        return (
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
-                extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
-        )
+    # # xxxx1111 ????
+    # def predict_start_from_z_and_v(self, x_t, t, v):
+    #     pdb.set_trace()
+    #     # self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
+    #     # self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
+    #     return (
+    #             extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
+    #             extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
+    #     )
 
-    # xxxx1111 ????
-    def predict_eps_from_z_and_v(self, x_t, t, v):
-        pdb.set_trace()
-        return (
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * v +
-                extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * x_t
-        )
+    # # xxxx1111 ????
+    # def predict_eps_from_z_and_v(self, x_t, t, v):
+    #     pdb.set_trace()
+    #     return (
+    #             extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * v +
+    #             extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * x_t
+    #     )
 
 
 class LatentDiffusion(DDPM):
