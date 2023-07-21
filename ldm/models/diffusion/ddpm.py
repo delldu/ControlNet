@@ -48,6 +48,7 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
                  logvar_init=0.,
                  ):
         super().__init__()
+
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
         print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
@@ -117,44 +118,26 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
         self.register_buffer('posterior_mean_coef2', to_torch(
             (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
-        if self.parameterization == "eps":
-            lvlb_weights = self.betas ** 2 / (
-                    2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
-        elif self.parameterization == "x0":
-            lvlb_weights = 0.5 * np.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
-        elif self.parameterization == "v":
-            lvlb_weights = torch.ones_like(self.betas ** 2 / (
-                    2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod)))
-        else:
-            raise NotImplementedError("mu not supported")
-        lvlb_weights[0] = lvlb_weights[1]
-        self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
-        assert not torch.isnan(self.lvlb_weights).all()
+        # if self.parameterization == "eps":
+        #     lvlb_weights = self.betas ** 2 / (
+        #             2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
+        # elif self.parameterization == "x0":
+        #     lvlb_weights = 0.5 * np.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
+        # elif self.parameterization == "v":
+        #     lvlb_weights = torch.ones_like(self.betas ** 2 / (
+        #             2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod)))
+        # else:
+        #     raise NotImplementedError("mu not supported")
+        # lvlb_weights[0] = lvlb_weights[1]
+        # self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
+        # assert not torch.isnan(self.lvlb_weights).all()
 
-    def predict_start_from_noise(self, x_t, t, noise):
-        return (
-                extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-                extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
-        )
 
-    # # xxxx1111 ????
-    # def predict_start_from_z_and_v(self, x_t, t, v):
-    #     pdb.set_trace()
-    #     # self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
-    #     # self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
+    # def predict_start_from_noise(self, x_t, t, noise):
     #     return (
-    #             extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
-    #             extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
+    #             extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
+    #             extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
     #     )
-
-    # # xxxx1111 ????
-    # def predict_eps_from_z_and_v(self, x_t, t, v):
-    #     pdb.set_trace()
-    #     return (
-    #             extract_into_tensor(self.sqrt_alphas_cumprod, t, x_t.shape) * v +
-    #             extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * x_t
-    #     )
-
 
 class LatentDiffusion(DDPM):
     """main class"""
