@@ -2,23 +2,23 @@ import torch
 import numpy as np
 
 
-class AbstractDistribution:
-    def sample(self):
-        raise NotImplementedError()
+# class AbstractDistribution:
+#     def sample(self):
+#         raise NotImplementedError()
 
-    def mode(self):
-        raise NotImplementedError()
+#     def mode(self):
+#         raise NotImplementedError()
 
 
-class DiracDistribution(AbstractDistribution):
-    def __init__(self, value):
-        self.value = value
+# class DiracDistribution(AbstractDistribution):
+#     def __init__(self, value):
+#         self.value = value
 
-    def sample(self):
-        return self.value
+#     def sample(self):
+#         return self.value
 
-    def mode(self):
-        return self.value
+#     def mode(self):
+#         return self.value
 
 
 class DiagonalGaussianDistribution(object):

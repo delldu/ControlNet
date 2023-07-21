@@ -74,23 +74,23 @@ def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
     return sigmas, alphas, alphas_prev
 
 
-def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
-    """
-    Create a beta schedule that discretizes the given alpha_t_bar function,
-    which defines the cumulative product of (1-beta) over time from t = [0,1].
-    :param num_diffusion_timesteps: the number of betas to produce.
-    :param alpha_bar: a lambda that takes an argument t from 0 to 1 and
-                      produces the cumulative product of (1-beta) up to that
-                      part of the diffusion process.
-    :param max_beta: the maximum beta to use; use values lower than 1 to
-                     prevent singularities.
-    """
-    betas = []
-    for i in range(num_diffusion_timesteps):
-        t1 = i / num_diffusion_timesteps
-        t2 = (i + 1) / num_diffusion_timesteps
-        betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
-    return np.array(betas)
+# def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
+#     """
+#     Create a beta schedule that discretizes the given alpha_t_bar function,
+#     which defines the cumulative product of (1-beta) over time from t = [0,1].
+#     :param num_diffusion_timesteps: the number of betas to produce.
+#     :param alpha_bar: a lambda that takes an argument t from 0 to 1 and
+#                       produces the cumulative product of (1-beta) up to that
+#                       part of the diffusion process.
+#     :param max_beta: the maximum beta to use; use values lower than 1 to
+#                      prevent singularities.
+#     """
+#     betas = []
+#     for i in range(num_diffusion_timesteps):
+#         t1 = i / num_diffusion_timesteps
+#         t2 = (i + 1) / num_diffusion_timesteps
+#         betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
+#     return np.array(betas)
 
 
 def extract_into_tensor(a, t, x_shape):
@@ -183,20 +183,20 @@ def zero_module(module):
     return module
 
 
-def scale_module(module, scale):
-    """
-    Scale the parameters of a module and return it.
-    """
-    for p in module.parameters():
-        p.detach().mul_(scale)
-    return module
+# def scale_module(module, scale):
+#     """
+#     Scale the parameters of a module and return it.
+#     """
+#     for p in module.parameters():
+#         p.detach().mul_(scale)
+#     return module
 
 
-def mean_flat(tensor):
-    """
-    Take the mean over all non-batch dimensions.
-    """
-    return tensor.mean(dim=list(range(1, len(tensor.shape))))
+# def mean_flat(tensor):
+#     """
+#     Take the mean over all non-batch dimensions.
+#     """
+#     return tensor.mean(dim=list(range(1, len(tensor.shape))))
 
 
 def normalization(channels):
@@ -250,17 +250,17 @@ def avg_pool_nd(dims, *args, **kwargs):
     raise ValueError(f"unsupported dimensions: {dims}")
 
 
-class HybridConditioner(nn.Module):
+# class HybridConditioner(nn.Module):
 
-    def __init__(self, c_concat_config, c_crossattn_config):
-        super().__init__()
-        self.concat_conditioner = instantiate_from_config(c_concat_config)
-        self.crossattn_conditioner = instantiate_from_config(c_crossattn_config)
+#     def __init__(self, c_concat_config, c_crossattn_config):
+#         super().__init__()
+#         self.concat_conditioner = instantiate_from_config(c_concat_config)
+#         self.crossattn_conditioner = instantiate_from_config(c_crossattn_config)
 
-    def forward(self, c_concat, c_crossattn):
-        c_concat = self.concat_conditioner(c_concat)
-        c_crossattn = self.crossattn_conditioner(c_crossattn)
-        return {'c_concat': [c_concat], 'c_crossattn': [c_crossattn]}
+#     def forward(self, c_concat, c_crossattn):
+#         c_concat = self.concat_conditioner(c_concat)
+#         c_crossattn = self.crossattn_conditioner(c_crossattn)
+#         return {'c_concat': [c_concat], 'c_crossattn': [c_crossattn]}
 
 
 def noise_like(shape, device, repeat=False):

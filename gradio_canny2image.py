@@ -33,7 +33,7 @@ ddim_sampler = DDIMSampler(model)
 # model.control_model -- ControlNet(...)
 
 # model.model.to_torchscript()
-# model.first_stage_model.to_torchscript()
+# torch.jit.script(model.first_stage_model)
 # torch.jit.script(model.cond_stage_model)
 # torch.jit.script(model.control_model) -- Unknown type name 'TimestepBlock'
 pdb.set_trace()

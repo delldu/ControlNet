@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from transformers import T5Tokenizer, T5EncoderModel, CLIPTokenizer, CLIPTextModel
+# from transformers import T5Tokenizer, T5EncoderModel, CLIPTokenizer, CLIPTextModel
+from transformers import CLIPTokenizer, CLIPTextModel
 
 import open_clip
-from ldm.util import default, count_params
+# from ldm.util import default, count_params
 import pdb
 
 class AbstractEncoder(nn.Module):
@@ -16,75 +17,75 @@ class AbstractEncoder(nn.Module):
         raise NotImplementedError
 
 
-class IdentityEncoder(AbstractEncoder):
+# class IdentityEncoder(AbstractEncoder):
 
-    def encode(self, x):
-        return x
-
-
-class ClassEmbedder(nn.Module):
-    def __init__(self, embed_dim, n_classes=1000, key='class', ucg_rate=0.1):
-        super().__init__()
-        self.key = key
-        self.embedding = nn.Embedding(n_classes, embed_dim)
-        self.n_classes = n_classes
-        self.ucg_rate = ucg_rate
-
-    def forward(self, batch, key=None, disable_dropout=False):
-        if key is None:
-            key = self.key
-        # this is for use in crossattn
-        c = batch[key][:, None]
-        if self.ucg_rate > 0. and not disable_dropout:
-            mask = 1. - torch.bernoulli(torch.ones_like(c) * self.ucg_rate)
-            c = mask * c + (1-mask) * torch.ones_like(c)*(self.n_classes-1)
-            c = c.long()
-        c = self.embedding(c)
-        return c
-
-    def get_unconditional_conditioning(self, bs, device="cuda"):
-        uc_class = self.n_classes - 1  # 1000 classes --> 0 ... 999, one extra class for ucg (class 1000)
-        uc = torch.ones((bs,), device=device) * uc_class
-        uc = {self.key: uc}
-        return uc
+#     def encode(self, x):
+#         return x
 
 
-def disabled_train(self, mode=True):
-    """Overwrite model.train with this function to make sure train/eval mode
-    does not change anymore."""
-    return self
+# class ClassEmbedder(nn.Module):
+#     def __init__(self, embed_dim, n_classes=1000, key='class', ucg_rate=0.1):
+#         super().__init__()
+#         self.key = key
+#         self.embedding = nn.Embedding(n_classes, embed_dim)
+#         self.n_classes = n_classes
+#         self.ucg_rate = ucg_rate
+
+#     def forward(self, batch, key=None, disable_dropout=False):
+#         if key is None:
+#             key = self.key
+#         # this is for use in crossattn
+#         c = batch[key][:, None]
+#         if self.ucg_rate > 0. and not disable_dropout:
+#             mask = 1. - torch.bernoulli(torch.ones_like(c) * self.ucg_rate)
+#             c = mask * c + (1-mask) * torch.ones_like(c)*(self.n_classes-1)
+#             c = c.long()
+#         c = self.embedding(c)
+#         return c
+
+#     def get_unconditional_conditioning(self, bs, device="cuda"):
+#         uc_class = self.n_classes - 1  # 1000 classes --> 0 ... 999, one extra class for ucg (class 1000)
+#         uc = torch.ones((bs,), device=device) * uc_class
+#         uc = {self.key: uc}
+#         return uc
 
 
-class FrozenT5Embedder(AbstractEncoder):
-    """Uses the T5 transformer encoder for text"""
-    def __init__(self, version="google/t5-v1_1-large", device="cuda", max_length=77, freeze=True):  # others are google/t5-v1_1-xl and google/t5-v1_1-xxl
-        super().__init__()
-        self.tokenizer = T5Tokenizer.from_pretrained(version)
-        self.transformer = T5EncoderModel.from_pretrained(version)
-        self.device = device
-        self.max_length = max_length   # TODO: typical value?
-        if freeze:
-            self.freeze()
-
-    def freeze(self):
-        self.transformer = self.transformer.eval()
-        #self.train = disabled_train
-        for param in self.parameters():
-            param.requires_grad = False
-
-    def forward(self, text):
-        batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
-                                        return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
-        tokens = batch_encoding["input_ids"].to(self.device)
-        outputs = self.transformer(input_ids=tokens)
-
-        z = outputs.last_hidden_state
-        return z
-
-    def encode(self, text):
-        return self(text)
+# def disabled_train(self, mode=True):
+#     """Overwrite model.train with this function to make sure train/eval mode
+#     does not change anymore."""
+#     return self
 
 
+# class FrozenT5Embedder(AbstractEncoder):
+#     """Uses the T5 transformer encoder for text"""
+#     def __init__(self, version="google/t5-v1_1-large", device="cuda", max_length=77, freeze=True):  # others are google/t5-v1_1-xl and google/t5-v1_1-xxl
+#         super().__init__()
+#         self.tokenizer = T5Tokenizer.from_pretrained(version)
+#         self.transformer = T5EncoderModel.from_pretrained(version)
+#         self.device = device
+#         self.max_length = max_length   # TODO: typical value?
+#         if freeze:
+#             self.freeze()
+
+#     def freeze(self):
+#         self.transformer = self.transformer.eval()
+#         #self.train = disabled_train
+#         for param in self.parameters():
+#             param.requires_grad = False
+
+#     def forward(self, text):
+#         batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
+#                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
+#         tokens = batch_encoding["input_ids"].to(self.device)
+#         outputs = self.transformer(input_ids=tokens)
+
+#         z = outputs.last_hidden_state
+#         return z
+
+#     def encode(self, text):
+#         return self(text)
+
+# xxxx1111 for v1.5
 class FrozenCLIPEmbedder(AbstractEncoder):
     """Uses the CLIP transformer encoder for text (from huggingface)"""
     LAYERS = [
@@ -117,23 +118,28 @@ class FrozenCLIPEmbedder(AbstractEncoder):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, text):
+    # xxxx1111
+    def forward(self, text: str):
+        # ['bag, best quality, extremely detailed']
         batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
-        tokens = batch_encoding["input_ids"].to(self.device)
+        tokens = batch_encoding["input_ids"].to(self.device) # size() -- [1, 77]
         outputs = self.transformer(input_ids=tokens, output_hidden_states=self.layer=="hidden")
+        #  outputs.keys() -- ['last_hidden_state', 'pooler_output']
         if self.layer == "last": # True
             z = outputs.last_hidden_state
         elif self.layer == "pooled":
             z = outputs.pooler_output[:, None, :]
         else:
             z = outputs.hidden_states[self.layer_idx]
-        return z
+        return z # z.size() -- [1, 77, 768]
+
 
     def encode(self, text):
         return self(text)
 
 
+# xxxx1111 for v2.1
 class FrozenOpenCLIPEmbedder(AbstractEncoder):
     """
     Uses the OpenCLIP transformer encoder for text
@@ -150,6 +156,30 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         model, _, _ = open_clip.create_model_and_transforms(arch, device=torch.device('cpu'), pretrained=version)
         del model.visual
         self.model = model
+        # layer="penultimate"
+        # (Pdb) self.model
+        # CLIP(
+        #   (transformer): Transformer(
+        #     (resblocks): ModuleList(
+        #       (0-23): 24 x ResidualAttentionBlock(
+        #         (ln_1): LayerNorm((1024,), eps=1e-05, elementwise_affine=True)
+        #         (attn): MultiheadAttention(
+        #           (out_proj): NonDynamicallyQuantizableLinear(in_features=1024, out_features=1024, bias=True)
+        #         )
+        #         (ls_1): Identity()
+        #         (ln_2): LayerNorm((1024,), eps=1e-05, elementwise_affine=True)
+        #         (mlp): Sequential(
+        #           (c_fc): Linear(in_features=1024, out_features=4096, bias=True)
+        #           (gelu): GELU(approximate='none')
+        #           (c_proj): Linear(in_features=4096, out_features=1024, bias=True)
+        #         )
+        #         (ls_2): Identity()
+        #       )
+        #     )
+        #   )
+        #   (token_embedding): Embedding(49408, 1024)
+        #   (ln_final): LayerNorm((1024,), eps=1e-05, elementwise_affine=True)
+        # )
 
         self.device = device
         self.max_length = max_length
@@ -168,14 +198,17 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, text):
-        tokens = open_clip.tokenize(text)
+    # xxxx1111
+    def forward(self, text: str):
+        # ['bag, best quality, extremely detailed']
+        tokens = open_clip.tokenize(text) # size() -- [1, 77]
         z = self.encode_with_transformer(tokens.to(self.device))
-        return z
+        return z # z.size() [1, 77, 1024]
 
     def encode_with_transformer(self, text):
         x = self.model.token_embedding(text)  # [batch_size, n_ctx, d_model]
-        x = x + self.model.positional_embedding
+        x = x + self.model.positional_embedding # self.model.positional_embedding.size() -- [77, 1024]
+
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.text_transformer_forward(x, attn_mask=self.model.attn_mask)
         x = x.permute(1, 0, 2)  # LND -> NLD
@@ -183,34 +216,37 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         return x
 
     def text_transformer_forward(self, x: torch.Tensor, attn_mask = None):
+        # len(self.model.transformer.resblocks) -- 24
         for i, r in enumerate(self.model.transformer.resblocks):
             if i == len(self.model.transformer.resblocks) - self.layer_idx:
                 break
-            if self.model.transformer.grad_checkpointing and not torch.jit.is_scripting():
+            if self.model.transformer.grad_checkpointing and not torch.jit.is_scripting(): # False
                 x = checkpoint(r, x, attn_mask)
             else:
                 x = r(x, attn_mask=attn_mask)
         return x
 
-    def encode(self, text):
+    # xxxx1111
+    def encode(self, text: str):
+        # text -- ['bag, best quality, extremely detailed']
         return self(text)
 
 
-class FrozenCLIPT5Encoder(AbstractEncoder):
-    def __init__(self, clip_version="openai/clip-vit-large-patch14", t5_version="google/t5-v1_1-xl", device="cuda",
-                 clip_max_length=77, t5_max_length=77):
-        super().__init__()
-        self.clip_encoder = FrozenCLIPEmbedder(clip_version, device, max_length=clip_max_length)
-        self.t5_encoder = FrozenT5Embedder(t5_version, device, max_length=t5_max_length)
-        print(f"{self.clip_encoder.__class__.__name__} has {count_params(self.clip_encoder)*1.e-6:.2f} M parameters, "
-              f"{self.t5_encoder.__class__.__name__} comes with {count_params(self.t5_encoder)*1.e-6:.2f} M params.")
+# class FrozenCLIPT5Encoder(AbstractEncoder):
+#     def __init__(self, clip_version="openai/clip-vit-large-patch14", t5_version="google/t5-v1_1-xl", device="cuda",
+#                  clip_max_length=77, t5_max_length=77):
+#         super().__init__()
+#         self.clip_encoder = FrozenCLIPEmbedder(clip_version, device, max_length=clip_max_length)
+#         self.t5_encoder = FrozenT5Embedder(t5_version, device, max_length=t5_max_length)
+#         print(f"{self.clip_encoder.__class__.__name__} has {count_params(self.clip_encoder)*1.e-6:.2f} M parameters, "
+#               f"{self.t5_encoder.__class__.__name__} comes with {count_params(self.t5_encoder)*1.e-6:.2f} M params.")
 
-    def encode(self, text):
-        return self(text)
+#     def encode(self, text):
+#         return self(text)
 
-    def forward(self, text):
-        clip_z = self.clip_encoder.encode(text)
-        t5_z = self.t5_encoder.encode(text)
-        return [clip_z, t5_z]
+#     def forward(self, text):
+#         clip_z = self.clip_encoder.encode(text)
+#         t5_z = self.t5_encoder.encode(text)
+#         return [clip_z, t5_z]
 
 

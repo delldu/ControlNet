@@ -311,6 +311,7 @@ class Model(nn.Module):
                  attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
                  resolution, use_timestep=True, use_linear_attn=False, attn_type="vanilla"):
         super().__init__()
+        pdb.set_trace()
         if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = self.ch*4
@@ -406,6 +407,8 @@ class Model(nn.Module):
                                         stride=1,
                                         padding=1)
 
+        pdb.set_trace()
+
     def forward(self, x, t=None, context=None):
         #assert x.shape[2] == x.shape[3] == self.resolution
         if context is not None:
@@ -464,6 +467,16 @@ class Encoder(nn.Module):
                  resolution, z_channels, double_z=True, use_linear_attn=False, attn_type="vanilla",
                  **ignore_kwargs):
         super().__init__()
+        # ch = 128
+        # out_ch = 3
+        # ch_mult = [1, 2, 4, 4]
+        # num_res_blocks = 2
+        # attn_resolutions = []
+        # in_channels = 3
+        # resolution = 256
+        # z_channels = 4
+        # ignore_kwargs = {}
+        
         if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = 0
@@ -670,180 +683,180 @@ class Decoder(nn.Module):
         return h
 
 
-class SimpleDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, *args, **kwargs):
-        super().__init__()
-        self.model = nn.ModuleList([nn.Conv2d(in_channels, in_channels, 1),
-                                     ResnetBlock(in_channels=in_channels,
-                                                 out_channels=2 * in_channels,
-                                                 temb_channels=0, dropout=0.0),
-                                     ResnetBlock(in_channels=2 * in_channels,
-                                                out_channels=4 * in_channels,
-                                                temb_channels=0, dropout=0.0),
-                                     ResnetBlock(in_channels=4 * in_channels,
-                                                out_channels=2 * in_channels,
-                                                temb_channels=0, dropout=0.0),
-                                     nn.Conv2d(2*in_channels, in_channels, 1),
-                                     Upsample(in_channels, with_conv=True)])
-        # end
-        self.norm_out = Normalize(in_channels)
-        self.conv_out = torch.nn.Conv2d(in_channels,
-                                        out_channels,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+# class SimpleDecoder(nn.Module):
+#     def __init__(self, in_channels, out_channels, *args, **kwargs):
+#         super().__init__()
+#         self.model = nn.ModuleList([nn.Conv2d(in_channels, in_channels, 1),
+#                                      ResnetBlock(in_channels=in_channels,
+#                                                  out_channels=2 * in_channels,
+#                                                  temb_channels=0, dropout=0.0),
+#                                      ResnetBlock(in_channels=2 * in_channels,
+#                                                 out_channels=4 * in_channels,
+#                                                 temb_channels=0, dropout=0.0),
+#                                      ResnetBlock(in_channels=4 * in_channels,
+#                                                 out_channels=2 * in_channels,
+#                                                 temb_channels=0, dropout=0.0),
+#                                      nn.Conv2d(2*in_channels, in_channels, 1),
+#                                      Upsample(in_channels, with_conv=True)])
+#         # end
+#         self.norm_out = Normalize(in_channels)
+#         self.conv_out = torch.nn.Conv2d(in_channels,
+#                                         out_channels,
+#                                         kernel_size=3,
+#                                         stride=1,
+#                                         padding=1)
 
-    def forward(self, x):
-        for i, layer in enumerate(self.model):
-            if i in [1,2,3]:
-                x = layer(x, None)
-            else:
-                x = layer(x)
+#     def forward(self, x):
+#         for i, layer in enumerate(self.model):
+#             if i in [1,2,3]:
+#                 x = layer(x, None)
+#             else:
+#                 x = layer(x)
 
-        h = self.norm_out(x)
-        h = nonlinearity(h)
-        x = self.conv_out(h)
-        return x
-
-
-class UpsampleDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, ch, num_res_blocks, resolution,
-                 ch_mult=(2,2), dropout=0.0):
-        super().__init__()
-        # upsampling
-        self.temb_ch = 0
-        self.num_resolutions = len(ch_mult)
-        self.num_res_blocks = num_res_blocks
-        block_in = in_channels
-        curr_res = resolution // 2 ** (self.num_resolutions - 1)
-        self.res_blocks = nn.ModuleList()
-        self.upsample_blocks = nn.ModuleList()
-        for i_level in range(self.num_resolutions):
-            res_block = []
-            block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
-                res_block.append(ResnetBlock(in_channels=block_in,
-                                         out_channels=block_out,
-                                         temb_channels=self.temb_ch,
-                                         dropout=dropout))
-                block_in = block_out
-            self.res_blocks.append(nn.ModuleList(res_block))
-            if i_level != self.num_resolutions - 1:
-                self.upsample_blocks.append(Upsample(block_in, True))
-                curr_res = curr_res * 2
-
-        # end
-        self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in,
-                                        out_channels,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
-
-    def forward(self, x):
-        # upsampling
-        h = x
-        for k, i_level in enumerate(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks + 1):
-                h = self.res_blocks[i_level][i_block](h, None)
-            if i_level != self.num_resolutions - 1:
-                h = self.upsample_blocks[k](h)
-        h = self.norm_out(h)
-        h = nonlinearity(h)
-        h = self.conv_out(h)
-        return h
+#         h = self.norm_out(x)
+#         h = nonlinearity(h)
+#         x = self.conv_out(h)
+#         return x
 
 
-class LatentRescaler(nn.Module):
-    def __init__(self, factor, in_channels, mid_channels, out_channels, depth=2):
-        super().__init__()
-        # residual block, interpolate, residual block
-        self.factor = factor
-        self.conv_in = nn.Conv2d(in_channels,
-                                 mid_channels,
-                                 kernel_size=3,
-                                 stride=1,
-                                 padding=1)
-        self.res_block1 = nn.ModuleList([ResnetBlock(in_channels=mid_channels,
-                                                     out_channels=mid_channels,
-                                                     temb_channels=0,
-                                                     dropout=0.0) for _ in range(depth)])
-        self.attn = AttnBlock(mid_channels)
-        self.res_block2 = nn.ModuleList([ResnetBlock(in_channels=mid_channels,
-                                                     out_channels=mid_channels,
-                                                     temb_channels=0,
-                                                     dropout=0.0) for _ in range(depth)])
+# class UpsampleDecoder(nn.Module):
+#     def __init__(self, in_channels, out_channels, ch, num_res_blocks, resolution,
+#                  ch_mult=(2,2), dropout=0.0):
+#         super().__init__()
+#         # upsampling
+#         self.temb_ch = 0
+#         self.num_resolutions = len(ch_mult)
+#         self.num_res_blocks = num_res_blocks
+#         block_in = in_channels
+#         curr_res = resolution // 2 ** (self.num_resolutions - 1)
+#         self.res_blocks = nn.ModuleList()
+#         self.upsample_blocks = nn.ModuleList()
+#         for i_level in range(self.num_resolutions):
+#             res_block = []
+#             block_out = ch * ch_mult[i_level]
+#             for i_block in range(self.num_res_blocks + 1):
+#                 res_block.append(ResnetBlock(in_channels=block_in,
+#                                          out_channels=block_out,
+#                                          temb_channels=self.temb_ch,
+#                                          dropout=dropout))
+#                 block_in = block_out
+#             self.res_blocks.append(nn.ModuleList(res_block))
+#             if i_level != self.num_resolutions - 1:
+#                 self.upsample_blocks.append(Upsample(block_in, True))
+#                 curr_res = curr_res * 2
 
-        self.conv_out = nn.Conv2d(mid_channels,
-                                  out_channels,
-                                  kernel_size=1,
-                                  )
+#         # end
+#         self.norm_out = Normalize(block_in)
+#         self.conv_out = torch.nn.Conv2d(block_in,
+#                                         out_channels,
+#                                         kernel_size=3,
+#                                         stride=1,
+#                                         padding=1)
 
-    def forward(self, x):
-        x = self.conv_in(x)
-        for block in self.res_block1:
-            x = block(x, None)
-        x = torch.nn.functional.interpolate(x, size=(int(round(x.shape[2]*self.factor)), int(round(x.shape[3]*self.factor))))
-        x = self.attn(x)
-        for block in self.res_block2:
-            x = block(x, None)
-        x = self.conv_out(x)
-        return x
-
-
-class MergedRescaleEncoder(nn.Module):
-    def __init__(self, in_channels, ch, resolution, out_ch, num_res_blocks,
-                 attn_resolutions, dropout=0.0, resamp_with_conv=True,
-                 ch_mult=(1,2,4,8), rescale_factor=1.0, rescale_module_depth=1):
-        super().__init__()
-        intermediate_chn = ch * ch_mult[-1]
-        self.encoder = Encoder(in_channels=in_channels, num_res_blocks=num_res_blocks, ch=ch, ch_mult=ch_mult,
-                               z_channels=intermediate_chn, double_z=False, resolution=resolution,
-                               attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv,
-                               out_ch=None)
-        self.rescaler = LatentRescaler(factor=rescale_factor, in_channels=intermediate_chn,
-                                       mid_channels=intermediate_chn, out_channels=out_ch, depth=rescale_module_depth)
-
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.rescaler(x)
-        return x
+#     def forward(self, x):
+#         # upsampling
+#         h = x
+#         for k, i_level in enumerate(range(self.num_resolutions)):
+#             for i_block in range(self.num_res_blocks + 1):
+#                 h = self.res_blocks[i_level][i_block](h, None)
+#             if i_level != self.num_resolutions - 1:
+#                 h = self.upsample_blocks[k](h)
+#         h = self.norm_out(h)
+#         h = nonlinearity(h)
+#         h = self.conv_out(h)
+#         return h
 
 
-class MergedRescaleDecoder(nn.Module):
-    def __init__(self, z_channels, out_ch, resolution, num_res_blocks, attn_resolutions, ch, ch_mult=(1,2,4,8),
-                 dropout=0.0, resamp_with_conv=True, rescale_factor=1.0, rescale_module_depth=1):
-        super().__init__()
-        tmp_chn = z_channels*ch_mult[-1]
-        self.decoder = Decoder(out_ch=out_ch, z_channels=tmp_chn, attn_resolutions=attn_resolutions, dropout=dropout,
-                               resamp_with_conv=resamp_with_conv, in_channels=None, num_res_blocks=num_res_blocks,
-                               ch_mult=ch_mult, resolution=resolution, ch=ch)
-        self.rescaler = LatentRescaler(factor=rescale_factor, in_channels=z_channels, mid_channels=tmp_chn,
-                                       out_channels=tmp_chn, depth=rescale_module_depth)
+# class LatentRescaler(nn.Module):
+#     def __init__(self, factor, in_channels, mid_channels, out_channels, depth=2):
+#         super().__init__()
+#         # residual block, interpolate, residual block
+#         self.factor = factor
+#         self.conv_in = nn.Conv2d(in_channels,
+#                                  mid_channels,
+#                                  kernel_size=3,
+#                                  stride=1,
+#                                  padding=1)
+#         self.res_block1 = nn.ModuleList([ResnetBlock(in_channels=mid_channels,
+#                                                      out_channels=mid_channels,
+#                                                      temb_channels=0,
+#                                                      dropout=0.0) for _ in range(depth)])
+#         self.attn = AttnBlock(mid_channels)
+#         self.res_block2 = nn.ModuleList([ResnetBlock(in_channels=mid_channels,
+#                                                      out_channels=mid_channels,
+#                                                      temb_channels=0,
+#                                                      dropout=0.0) for _ in range(depth)])
 
-    def forward(self, x):
-        x = self.rescaler(x)
-        x = self.decoder(x)
-        return x
+#         self.conv_out = nn.Conv2d(mid_channels,
+#                                   out_channels,
+#                                   kernel_size=1,
+#                                   )
+
+#     def forward(self, x):
+#         x = self.conv_in(x)
+#         for block in self.res_block1:
+#             x = block(x, None)
+#         x = torch.nn.functional.interpolate(x, size=(int(round(x.shape[2]*self.factor)), int(round(x.shape[3]*self.factor))))
+#         x = self.attn(x)
+#         for block in self.res_block2:
+#             x = block(x, None)
+#         x = self.conv_out(x)
+#         return x
 
 
-class Upsampler(nn.Module):
-    def __init__(self, in_size, out_size, in_channels, out_channels, ch_mult=2):
-        super().__init__()
-        assert out_size >= in_size
-        num_blocks = int(np.log2(out_size//in_size))+1
-        factor_up = 1.+ (out_size % in_size)
-        print(f"Building {self.__class__.__name__} with in_size: {in_size} --> out_size {out_size} and factor {factor_up}")
-        self.rescaler = LatentRescaler(factor=factor_up, in_channels=in_channels, mid_channels=2*in_channels,
-                                       out_channels=in_channels)
-        self.decoder = Decoder(out_ch=out_channels, resolution=out_size, z_channels=in_channels, num_res_blocks=2,
-                               attn_resolutions=[], in_channels=None, ch=in_channels,
-                               ch_mult=[ch_mult for _ in range(num_blocks)])
+# class MergedRescaleEncoder(nn.Module):
+#     def __init__(self, in_channels, ch, resolution, out_ch, num_res_blocks,
+#                  attn_resolutions, dropout=0.0, resamp_with_conv=True,
+#                  ch_mult=(1,2,4,8), rescale_factor=1.0, rescale_module_depth=1):
+#         super().__init__()
+#         intermediate_chn = ch * ch_mult[-1]
+#         self.encoder = Encoder(in_channels=in_channels, num_res_blocks=num_res_blocks, ch=ch, ch_mult=ch_mult,
+#                                z_channels=intermediate_chn, double_z=False, resolution=resolution,
+#                                attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv,
+#                                out_ch=None)
+#         self.rescaler = LatentRescaler(factor=rescale_factor, in_channels=intermediate_chn,
+#                                        mid_channels=intermediate_chn, out_channels=out_ch, depth=rescale_module_depth)
 
-    def forward(self, x):
-        x = self.rescaler(x)
-        x = self.decoder(x)
-        return x
+#     def forward(self, x):
+#         x = self.encoder(x)
+#         x = self.rescaler(x)
+#         return x
+
+
+# class MergedRescaleDecoder(nn.Module):
+#     def __init__(self, z_channels, out_ch, resolution, num_res_blocks, attn_resolutions, ch, ch_mult=(1,2,4,8),
+#                  dropout=0.0, resamp_with_conv=True, rescale_factor=1.0, rescale_module_depth=1):
+#         super().__init__()
+#         tmp_chn = z_channels*ch_mult[-1]
+#         self.decoder = Decoder(out_ch=out_ch, z_channels=tmp_chn, attn_resolutions=attn_resolutions, dropout=dropout,
+#                                resamp_with_conv=resamp_with_conv, in_channels=None, num_res_blocks=num_res_blocks,
+#                                ch_mult=ch_mult, resolution=resolution, ch=ch)
+#         self.rescaler = LatentRescaler(factor=rescale_factor, in_channels=z_channels, mid_channels=tmp_chn,
+#                                        out_channels=tmp_chn, depth=rescale_module_depth)
+
+#     def forward(self, x):
+#         x = self.rescaler(x)
+#         x = self.decoder(x)
+#         return x
+
+
+# class Upsampler(nn.Module):
+#     def __init__(self, in_size, out_size, in_channels, out_channels, ch_mult=2):
+#         super().__init__()
+#         assert out_size >= in_size
+#         num_blocks = int(np.log2(out_size//in_size))+1
+#         factor_up = 1.+ (out_size % in_size)
+#         print(f"Building {self.__class__.__name__} with in_size: {in_size} --> out_size {out_size} and factor {factor_up}")
+#         self.rescaler = LatentRescaler(factor=factor_up, in_channels=in_channels, mid_channels=2*in_channels,
+#                                        out_channels=in_channels)
+#         self.decoder = Decoder(out_ch=out_channels, resolution=out_size, z_channels=in_channels, num_res_blocks=2,
+#                                attn_resolutions=[], in_channels=None, ch=in_channels,
+#                                ch_mult=[ch_mult for _ in range(num_blocks)])
+
+#     def forward(self, x):
+#         x = self.rescaler(x)
+#         x = self.decoder(x)
+#         return x
 
 
 class Resize(nn.Module):
