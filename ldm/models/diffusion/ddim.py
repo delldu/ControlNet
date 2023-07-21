@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like, extract_into_tensor
-
+import pdb
 
 class DDIMSampler(object):
     def __init__(self, model, schedule="linear", **kwargs):
@@ -50,6 +50,7 @@ class DDIMSampler(object):
             (1 - self.alphas_cumprod_prev) / (1 - self.alphas_cumprod) * (
                         1 - self.alphas_cumprod / self.alphas_cumprod_prev))
         self.register_buffer('ddim_sigmas_for_original_num_steps', sigmas_for_original_sampling_steps)
+        pdb.set_trace()
 
     @torch.no_grad()
     def sample(self,
@@ -117,6 +118,7 @@ class DDIMSampler(object):
                                                     dynamic_threshold=dynamic_threshold,
                                                     ucg_schedule=ucg_schedule
                                                     )
+        pdb.set_trace()
         return samples, intermediates
 
     @torch.no_grad()
@@ -175,6 +177,7 @@ class DDIMSampler(object):
                 intermediates['x_inter'].append(img)
                 intermediates['pred_x0'].append(pred_x0)
 
+        pdb.set_trace()
         return img, intermediates
 
     @torch.no_grad()
@@ -248,6 +251,7 @@ class DDIMSampler(object):
         if noise_dropout > 0.:
             noise = torch.nn.functional.dropout(noise, p=noise_dropout)
         x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
+        pdb.set_trace()
         return x_prev, pred_x0
 
     @torch.no_grad()
@@ -295,6 +299,7 @@ class DDIMSampler(object):
         out = {'x_encoded': x_next, 'intermediate_steps': inter_steps}
         if return_intermediates:
             out.update({'intermediates': intermediates})
+        pdb.set_trace()
         return x_next, out
 
     @torch.no_grad()
@@ -310,6 +315,7 @@ class DDIMSampler(object):
 
         if noise is None:
             noise = torch.randn_like(x0)
+        pdb.set_trace()
         return (extract_into_tensor(sqrt_alphas_cumprod, t, x0.shape) * x0 +
                 extract_into_tensor(sqrt_one_minus_alphas_cumprod, t, x0.shape) * noise)
 
@@ -333,4 +339,6 @@ class DDIMSampler(object):
                                           unconditional_guidance_scale=unconditional_guidance_scale,
                                           unconditional_conditioning=unconditional_conditioning)
             if callback: callback(i)
+
+        pdb.set_trace()
         return x_dec

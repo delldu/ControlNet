@@ -42,7 +42,7 @@ class AutoencoderKL(pl.LightningModule):
             self.monitor = monitor
 
         self.use_ema = ema_decay is not None
-        if self.use_ema:
+        if self.use_ema: # False
             self.ema_decay = ema_decay
             assert 0. < ema_decay < 1.
             self.model_ema = LitEma(self, decay=ema_decay)
@@ -50,7 +50,7 @@ class AutoencoderKL(pl.LightningModule):
 
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
-        pdb.set_trace()
+        # pdb.set_trace()
 
     def init_from_ckpt(self, path, ignore_keys=list()):
         sd = torch.load(path, map_location="cpu")["state_dict"]
@@ -86,11 +86,14 @@ class AutoencoderKL(pl.LightningModule):
         h = self.encoder(x)
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
+
+        pdb.set_trace()
         return posterior
 
     def decode(self, z):
         z = self.post_quant_conv(z)
         dec = self.decoder(z)
+        # ==> pdb.set_trace()
         return dec
 
     def forward(self, input, sample_posterior=True):
@@ -100,6 +103,7 @@ class AutoencoderKL(pl.LightningModule):
         else:
             z = posterior.mode()
         dec = self.decode(z)
+        pdb.set_trace()
         return dec, posterior
 
     def get_input(self, batch, k):
@@ -112,6 +116,8 @@ class AutoencoderKL(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx):
         inputs = self.get_input(batch, self.image_key)
         reconstructions, posterior = self(inputs)
+
+        pdb.set_trace()
 
         if optimizer_idx == 0:
             # train encoder+decoder+logvar
@@ -161,6 +167,7 @@ class AutoencoderKL(pl.LightningModule):
                                   lr=lr, betas=(0.5, 0.9))
         opt_disc = torch.optim.Adam(self.loss.discriminator.parameters(),
                                     lr=lr, betas=(0.5, 0.9))
+        pdb.set_trace()
         return [opt_ae, opt_disc], []
 
     def get_last_layer(self):
@@ -190,6 +197,8 @@ class AutoencoderKL(pl.LightningModule):
                     log["samples_ema"] = self.decode(torch.randn_like(posterior_ema.sample()))
                     log["reconstructions_ema"] = xrec_ema
         log["inputs"] = x
+        pdb.set_trace()
+
         return log
 
     def to_rgb(self, x):

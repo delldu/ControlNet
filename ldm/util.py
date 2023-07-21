@@ -76,8 +76,6 @@ def instantiate_from_config(config):
         elif config == "__is_unconditional__":
             return None
         raise KeyError("Expected key `target` to instantiate.")
-
-    # del config['params']['first_stage_config']['params']['ddconfig']['double_z']
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 
@@ -111,6 +109,7 @@ class AdamWwithEMAandWings(optim.Optimizer):
                         weight_decay=weight_decay, amsgrad=amsgrad, ema_decay=ema_decay,
                         ema_power=ema_power, param_names=param_names)
         super().__init__(params, defaults)
+        pdb.set_trace()
 
     def __setstate__(self, state):
         super().__setstate__(state)

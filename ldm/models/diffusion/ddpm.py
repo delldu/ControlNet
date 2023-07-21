@@ -80,7 +80,37 @@ class DDPM(pl.LightningModule):
                  reset_num_ema_updates=False,
                  ):
         super().__init__()
-        pdb.set_trace()
+        # unet_config = {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}
+        # timesteps = 1000
+        # beta_schedule = 'linear'
+        # loss_type = 'l2'
+        # ckpt_path = None
+        # ignore_keys = []
+        # load_only_unet = False
+        # monitor = 'val/loss_simple_ema'
+        # use_ema = False
+        # first_stage_key = 'jpg'
+        # image_size = 64
+        # channels = 4
+        # log_every_t = 200
+        # clip_denoised = True
+        # linear_start = 0.00085
+        # linear_end = 0.012
+        # cosine_s = 0.008
+        # given_betas = None
+        # original_elbo_weight = 0.0
+        # v_posterior = 0.0
+        # l_simple_weight = 1.0
+        # conditioning_key = 'crossattn'
+        # parameterization = 'eps'
+        # scheduler_config = None
+        # use_positional_encodings = False
+        # learn_logvar = False
+        # logvar_init = 0.0
+        # make_it_fit = False
+        # ucg_training = None
+        # reset_ema = False
+        # reset_num_ema_updates = False
 
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
@@ -137,7 +167,6 @@ class DDPM(pl.LightningModule):
         self.ucg_training = ucg_training or dict()
         if self.ucg_training:
             self.ucg_prng = np.random.RandomState()
-        pdb.set_trace()
         
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
                           linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
@@ -333,6 +362,8 @@ class DDPM(pl.LightningModule):
         noise = noise_like(x.shape, device, repeat_noise)
         # no noise when t == 0
         nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
+
+        pdb.set_trace()
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
     @torch.no_grad()
@@ -346,6 +377,7 @@ class DDPM(pl.LightningModule):
                                 clip_denoised=self.clip_denoised)
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
+        pdb.set_trace()
         if return_intermediates:
             return img, intermediates
         return img
@@ -381,9 +413,12 @@ class DDPM(pl.LightningModule):
         else:
             raise NotImplementedError("unknown loss type '{loss_type}'")
 
+        pdb.set_trace()
         return loss
 
     def p_losses(self, x_start, t, noise=None):
+        pdb.set_trace()
+
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_out = self.model(x_noisy, t)
@@ -412,6 +447,8 @@ class DDPM(pl.LightningModule):
 
         loss_dict.update({f'{log_prefix}/loss': loss})
 
+        pdb.set_trace()
+
         return loss, loss_dict
 
     def forward(self, x, *args, **kwargs):
@@ -426,6 +463,8 @@ class DDPM(pl.LightningModule):
             x = x[..., None]
         x = rearrange(x, 'b h w c -> b c h w')
         x = x.to(memory_format=torch.contiguous_format).float()
+
+        pdb.set_trace()
         return x
 
     def shared_step(self, batch):
@@ -454,6 +493,8 @@ class DDPM(pl.LightningModule):
         if self.use_scheduler:
             lr = self.optimizers().param_groups[0]['lr']
             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
+        pdb.set_trace()
 
         return loss
 
@@ -508,6 +549,8 @@ class DDPM(pl.LightningModule):
             log["samples"] = samples
             log["denoise_row"] = self._get_rows_from_list(denoise_row)
 
+        pdb.set_trace()
+
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
                 return log
@@ -521,12 +564,13 @@ class DDPM(pl.LightningModule):
         if self.learn_logvar:
             params = params + [self.logvar]
         opt = torch.optim.AdamW(params, lr=lr)
+
+        pdb.set_trace()
         return opt
 
 
 class LatentDiffusion(DDPM):
     """main class"""
-
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -540,6 +584,17 @@ class LatentDiffusion(DDPM):
                  scale_by_std=False,
                  force_null_conditioning=False,
                  *args, **kwargs):
+
+        # num_timesteps_cond = 1
+        # cond_stage_key = 'txt'
+        # conditioning_key = 'crossattn'
+        # scale_factor = 0.18215
+        # args = ()
+        # (Pdb) kwargs
+        # {'linear_start': 0.00085, 'linear_end': 0.012, 'log_every_t': 200, 'timesteps': 1000, 
+        #     'first_stage_key': 'jpg', 'image_size': 64, 'channels': 4, 'monitor': 'val/loss_simple_ema', 
+        #     'use_ema': False, 'unet_config': {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}}
+
         self.force_null_conditioning = force_null_conditioning
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
@@ -572,7 +627,7 @@ class LatentDiffusion(DDPM):
         self.bbox_tokenizer = None
 
         self.restarted_from_ckpt = False
-        if ckpt_path is not None:
+        if ckpt_path is not None: # False
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
             if reset_ema:
@@ -580,11 +635,10 @@ class LatentDiffusion(DDPM):
                 print(
                     f"Resetting ema to pure model weights. This is useful when restoring from an ema-only checkpoint.")
                 self.model_ema = LitEma(self.model)
-        if reset_num_ema_updates:
+        if reset_num_ema_updates: # False
             print(" +++++++++++ WARNING: RESETTING NUM_EMA UPDATES TO ZERO +++++++++++ ")
             assert self.use_ema
             self.model_ema.reset_num_updates()
-        pdb.set_trace()
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
@@ -625,7 +679,7 @@ class LatentDiffusion(DDPM):
             param.requires_grad = False
 
     def instantiate_cond_stage(self, config):
-        if not self.cond_stage_trainable:
+        if not self.cond_stage_trainable: # True
             if config == "__is_first_stage__":
                 print("Using first stage also as cond stage.")
                 self.cond_stage_model = self.first_stage_model
@@ -633,7 +687,7 @@ class LatentDiffusion(DDPM):
                 print(f"Training {self.__class__.__name__} as an unconditional model.")
                 self.cond_stage_model = None
                 # self.be_unconditional = True
-            else:
+            else: # True
                 model = instantiate_from_config(config)
                 self.cond_stage_model = model.eval()
                 self.cond_stage_model.train = disabled_train
@@ -644,6 +698,7 @@ class LatentDiffusion(DDPM):
             assert config != '__is_unconditional__'
             model = instantiate_from_config(config)
             self.cond_stage_model = model
+        # pdb.set_trace()
 
     def _get_denoise_row_from_list(self, samples, desc='', force_no_decoder_quantization=False):
         denoise_row = []
@@ -666,9 +721,10 @@ class LatentDiffusion(DDPM):
             raise NotImplementedError(f"encoder_posterior of type '{type(encoder_posterior)}' not yet implemented")
         return self.scale_factor * z
 
+    # xxxx1111 ????
     def get_learned_conditioning(self, c):
-        if self.cond_stage_forward is None:
-            if hasattr(self.cond_stage_model, 'encode') and callable(self.cond_stage_model.encode):
+        if self.cond_stage_forward is None: # True
+            if hasattr(self.cond_stage_model, 'encode') and callable(self.cond_stage_model.encode): # True
                 c = self.cond_stage_model.encode(c)
                 if isinstance(c, DiagonalGaussianDistribution):
                     c = c.mode()
@@ -677,7 +733,7 @@ class LatentDiffusion(DDPM):
         else:
             assert hasattr(self.cond_stage_model, self.cond_stage_forward)
             c = getattr(self.cond_stage_model, self.cond_stage_forward)(c)
-        pdb.set_trace()
+
         return c
 
     def meshgrid(self, h, w):
@@ -699,6 +755,9 @@ class LatentDiffusion(DDPM):
         dist_left_up = torch.min(arr, dim=-1, keepdims=True)[0]
         dist_right_down = torch.min(1 - arr, dim=-1, keepdims=True)[0]
         edge_dist = torch.min(torch.cat([dist_left_up, dist_right_down], dim=-1), dim=-1)[0]
+
+        pdb.set_trace()
+
         return edge_dist
 
     def get_weighting(self, h, w, Ly, Lx, device):
@@ -715,6 +774,8 @@ class LatentDiffusion(DDPM):
 
             L_weighting = L_weighting.view(1, 1, Ly * Lx).to(device)
             weighting = weighting * L_weighting
+
+        pdb.set_trace()
         return weighting
 
     def get_fold_unfold(self, x, kernel_size, stride, uf=1, df=1):  # todo load once not every time, shorten code
@@ -722,6 +783,8 @@ class LatentDiffusion(DDPM):
         :param x: img of size (bs, c, h, w)
         :return: n img crops of size (n, bs, c, kernel_size[0], kernel_size[1])
         """
+        pdb.set_trace()
+
         bs, nc, h, w = x.shape
 
         # number of crops in image
@@ -766,6 +829,8 @@ class LatentDiffusion(DDPM):
 
         else:
             raise NotImplementedError
+
+        pdb.set_trace()
 
         return fold, unfold, normalization, weighting
 
@@ -822,8 +887,11 @@ class LatentDiffusion(DDPM):
             out.append(xc)
         return out
 
+    # xxxx1111
     @torch.no_grad()
     def decode_first_stage(self, z, predict_cids=False, force_not_quantize=False):
+        # predict_cids = False
+        # force_not_quantize = False
         if predict_cids:
             if z.dim() == 4:
                 z = torch.argmax(z.exp(), dim=1).long()
@@ -852,9 +920,13 @@ class LatentDiffusion(DDPM):
             if self.shorten_cond_schedule:  # TODO: drop this option
                 tc = self.cond_ids[t].to(self.device)
                 c = self.q_sample(x_start=c, t=tc, noise=torch.randn_like(c.float()))
+        pdb.set_trace()
+
         return self.p_losses(x, c, t, *args, **kwargs)
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
+        pdb.set_trace()
+
         if isinstance(cond, dict):
             # hybrid case, cond is expected to be a dict
             pass
@@ -865,6 +937,8 @@ class LatentDiffusion(DDPM):
             cond = {key: cond}
 
         x_recon = self.model(x_noisy, t, **cond)
+
+        pdb.set_trace()
 
         if isinstance(x_recon, tuple) and not return_ids:
             return x_recon[0]
@@ -924,6 +998,8 @@ class LatentDiffusion(DDPM):
         loss += (self.original_elbo_weight * loss_vlb)
         loss_dict.update({f'{prefix}/loss': loss})
 
+        pdb.set_trace()
+
         return loss, loss_dict
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
@@ -950,6 +1026,9 @@ class LatentDiffusion(DDPM):
         if quantize_denoised:
             x_recon, _, [_, _, indices] = self.first_stage_model.quantize(x_recon)
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+
+        pdb.set_trace()
+
         if return_codebook_ids:
             return model_mean, posterior_variance, posterior_log_variance, logits
         elif return_x0:
@@ -993,6 +1072,7 @@ class LatentDiffusion(DDPM):
                               img_callback=None, mask=None, x0=None, temperature=1., noise_dropout=0.,
                               score_corrector=None, corrector_kwargs=None, batch_size=None, x_T=None, start_T=None,
                               log_every_t=None):
+        pdb.set_trace()
         if not log_every_t:
             log_every_t = self.log_every_t
         timesteps = self.num_timesteps
@@ -1042,6 +1122,9 @@ class LatentDiffusion(DDPM):
                 intermediates.append(x0_partial)
             if callback: callback(i)
             if img_callback: img_callback(img, i)
+
+        pdb.set_trace()
+
         return img, intermediates
 
     @torch.no_grad()
@@ -1091,6 +1174,8 @@ class LatentDiffusion(DDPM):
             if callback: callback(i)
             if img_callback: img_callback(img, i)
 
+        pdb.set_trace()
+
         if return_intermediates:
             return img, intermediates
         return img
@@ -1124,11 +1209,13 @@ class LatentDiffusion(DDPM):
         else:
             samples, intermediates = self.sample(cond=cond, batch_size=batch_size,
                                                  return_intermediates=True, **kwargs)
-
+        pdb.set_trace()
         return samples, intermediates
 
     @torch.no_grad()
     def get_unconditional_conditioning(self, batch_size, null_label=None):
+        pdb.set_trace()
+
         if null_label is not None:
             xc = null_label
             if isinstance(xc, ListConfig):
@@ -1150,6 +1237,9 @@ class LatentDiffusion(DDPM):
                 c[i] = repeat(c[i], '1 ... -> b ...', b=batch_size).to(self.device)
         else:
             c = repeat(c, '1 ... -> b ...', b=batch_size).to(self.device)
+
+        pdb.set_trace()
+
         return c
 
     @torch.no_grad()
@@ -1171,6 +1261,8 @@ class LatentDiffusion(DDPM):
         n_row = min(x.shape[0], n_row)
         log["inputs"] = x
         log["reconstruction"] = xrec
+        pdb.set_trace()
+
         if self.model.conditioning_key is not None:
             if hasattr(self.cond_stage_model, "decode"):
                 xc = self.cond_stage_model.decode(c)
@@ -1189,6 +1281,8 @@ class LatentDiffusion(DDPM):
                 log["conditioning"] = xc
             if ismap(xc):
                 log["original_conditioning"] = self.to_rgb(xc)
+
+        pdb.set_trace()
 
         if plot_diffusion_rows:
             # get diffusion row
@@ -1275,6 +1369,7 @@ class LatentDiffusion(DDPM):
             prog_row = self._get_denoise_row_from_list(progressives, desc="Progressive Generation")
             log["progressive_row"] = prog_row
 
+        pdb.set_trace()
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
                 return log
@@ -1304,6 +1399,8 @@ class LatentDiffusion(DDPM):
                     'frequency': 1
                 }]
             return [opt], scheduler
+
+        pdb.set_trace()
         return opt
 
     @torch.no_grad()
@@ -1323,6 +1420,9 @@ class DiffusionWrapper(pl.LightningModule):
         self.diffusion_model = instantiate_from_config(diff_model_config)
         self.conditioning_key = conditioning_key
         assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']
+        # diff_model_config = {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}
+        # conditioning_key = 'crossattn'
+
 
     def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None):
         if self.conditioning_key is None:
@@ -1355,6 +1455,8 @@ class DiffusionWrapper(pl.LightningModule):
         else:
             raise NotImplementedError()
 
+        pdb.set_trace()
+
         return out
 
 
@@ -1366,6 +1468,7 @@ class LatentUpscaleDiffusion(LatentDiffusion):
         self.instantiate_low_stage(low_scale_config)
         self.low_scale_key = low_scale_key
         self.noise_level_key = noise_level_key
+        pdb.set_trace()
 
     def instantiate_low_stage(self, config):
         model = instantiate_from_config(config)
@@ -1493,6 +1596,8 @@ class LatentUpscaleDiffusion(LatentDiffusion):
             prog_row = self._get_denoise_row_from_list(progressives, desc="Progressive Generation")
             log["progressive_row"] = prog_row
 
+        pdb.set_trace()
+
         return log
 
 
@@ -1524,6 +1629,7 @@ class LatentFinetuneDiffusion(LatentDiffusion):
         if exists(self.finetune_keys): assert exists(ckpt_path), 'can only finetune from a given checkpoint'
         if exists(ckpt_path):
             self.init_from_ckpt(ckpt_path, ignore_keys)
+        pdb.set_trace()
 
     def init_from_ckpt(self, path, ignore_keys=list(), only_model=False):
         sd = torch.load(path, map_location="cpu")
@@ -1635,6 +1741,8 @@ class LatentFinetuneDiffusion(LatentDiffusion):
                 x_samples_cfg = self.decode_first_stage(samples_cfg)
                 log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg
 
+        pdb.set_trace()
+
         return log
 
 
@@ -1697,6 +1805,7 @@ class LatentDepth2ImageDiffusion(LatentFinetuneDiffusion):
         super().__init__(concat_keys=concat_keys, *args, **kwargs)
         self.depth_model = instantiate_from_config(depth_stage_config)
         self.depth_stage_key = concat_keys[0]
+        pdb.set_trace()
 
     @torch.no_grad()
     def get_input(self, batch, k, cond_key=None, bs=None, return_first_stage_outputs=False):
@@ -1755,6 +1864,7 @@ class LatentUpscaleFinetuneDiffusion(LatentFinetuneDiffusion):
             assert exists(low_scale_key)
             self.instantiate_low_stage(low_scale_config)
             self.low_scale_key = low_scale_key
+        pdb.set_trace()
 
     def instantiate_low_stage(self, config):
         model = instantiate_from_config(config)

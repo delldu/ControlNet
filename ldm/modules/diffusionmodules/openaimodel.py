@@ -70,12 +70,12 @@ class TimestepBlock(nn.Module):
         """
 
 # xxxx8888
-class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
+# class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
+class TimestepEmbedSequential(nn.Sequential):
     """
     A sequential module that passes timestep embeddings to the children that
     support it as an extra input.
     """
-
     def forward(self, x, emb, context=None):
         for layer in self:
             if isinstance(layer, TimestepBlock): # 'ldm.modules.diffusionmodules.openaimodel.ResBlock' -- TimestepBlock
@@ -86,6 +86,47 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
                 x = layer(x) # 'torch.nn.modules.conv.Conv2d' ...
         return x
 
+def CreateTimestepEmbedSequential(layer):
+    if isinstance(layer, TimestepBlock):
+        return TimestepEmbedSequentialForTimestepBlock(layer)
+
+    if isinstance(layer, SpatialTransformer): # 'ldm.modules.attention.SpatialTransformer'
+        return TimestepEmbedSequentialForSpatialTransformer(layer)
+
+    return TimestepEmbedSequentialForNormal(layer)
+
+
+class TimestepEmbedSequentialForTimestepBlock(nn.Sequential):
+    """
+    A sequential module that passes timestep embeddings to the children that
+    support it as an extra input.
+    """
+
+    def forward(self, x, emb, context=None):
+        for layer in self:
+            x = layer(x, emb)
+        return x
+
+class TimestepEmbedSequentialForSpatialTransformer(nn.Sequential):
+    """
+    A sequential module that passes timestep embeddings to the children that
+    support it as an extra input.
+    """
+    def forward(self, x, emb, context=None):
+        for layer in self:
+            x = layer(x, emb)
+        return x
+
+class TimestepEmbedSequentialForNormal(nn.Sequential):
+    """
+    A sequential module that passes timestep embeddings to the children that
+    support it as an extra input.
+    """
+
+    def forward(self, x, emb, context=None):
+        for layer in self:
+            x = layer(x) # 'torch.nn.modules.conv.Conv2d' ...
+        return x
 
 class Upsample(nn.Module):
     """
@@ -242,7 +283,6 @@ class ResBlock(TimestepBlock):
             )
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
-
 
     def forward(self, x, emb):
         """
@@ -505,10 +545,10 @@ class UNetModel(nn.Module):
                 raise ValueError("provide num_res_blocks either as an int (globally constant) or "
                                  "as a list/tuple (per-level) with the same length as channel_mult")
             self.num_res_blocks = num_res_blocks
-        if disable_self_attentions is not None:
+        if disable_self_attentions is not None: # False
             # should be a list of booleans, indicating whether to disable self-attention in TransformerBlocks or not
             assert len(disable_self_attentions) == len(channel_mult)
-        if num_attention_blocks is not None:
+        if num_attention_blocks is not None: # False
             assert len(num_attention_blocks) == len(self.num_res_blocks)
             assert all(map(lambda i: self.num_res_blocks[i] >= num_attention_blocks[i], range(len(num_attention_blocks))))
             print(f"Constructor of UNetModel received num_attention_blocks={num_attention_blocks}. "
@@ -535,7 +575,7 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        if self.num_classes is not None:
+        if self.num_classes is not None: # False
             if isinstance(self.num_classes, int):
                 self.label_emb = nn.Embedding(num_classes, time_embed_dim)
             elif self.num_classes == "continuous":
@@ -546,7 +586,7 @@ class UNetModel(nn.Module):
 
         self.input_blocks = nn.ModuleList(
             [
-                TimestepEmbedSequential(
+                TimestepEmbedSequentialForNormal(
                     conv_nd(dims, in_channels, model_channels, 3, padding=1)
                 )
             ]
@@ -555,7 +595,7 @@ class UNetModel(nn.Module):
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
-        for level, mult in enumerate(channel_mult):
+        for level, mult in enumerate(channel_mult): # [1, 2, 4, 4]
             for nr in range(self.num_res_blocks[level]):
                 layers = [
                     ResBlock(
@@ -569,7 +609,7 @@ class UNetModel(nn.Module):
                     )
                 ]
                 ch = mult * model_channels
-                if ds in attention_resolutions:
+                if ds in attention_resolutions: # [4, 2, 1]
                     if num_head_channels == -1:
                         dim_head = ch // num_heads
                     else:
@@ -583,7 +623,7 @@ class UNetModel(nn.Module):
                     else:
                         disabled_sa = False
 
-                    if not exists(num_attention_blocks) or nr < num_attention_blocks[level]:
+                    if not exists(num_attention_blocks) or nr < num_attention_blocks[level]: # True
                         layers.append(
                             AttentionBlock(
                                 ch,
@@ -598,6 +638,10 @@ class UNetModel(nn.Module):
                             )
                         )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
+                # for lx in layers:
+                #     self.input_blocks.append(CreateTimestepEmbedSequential(lx))
+
+
                 self._feature_size += ch
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
@@ -620,6 +664,19 @@ class UNetModel(nn.Module):
                         )
                     )
                 )
+                # if resblock_updown:
+                #     lx = ResBlock(ch,
+                #         time_embed_dim,
+                #         dropout,
+                #         out_channels=out_ch,
+                #         dims=dims,
+                #         use_checkpoint=use_checkpoint,
+                #         use_scale_shift_norm=use_scale_shift_norm,
+                #         down=True)
+                # else:
+                #     lx = Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
+                # self.input_blocks.append(CreateTimestepEmbedSequential(lx))
+
                 ch = out_ch
                 input_block_chans.append(ch)
                 ds *= 2
@@ -733,12 +790,13 @@ class UNetModel(nn.Module):
             nn.SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
-        if self.predict_codebook_ids:
+        if self.predict_codebook_ids: # False
             self.id_predictor = nn.Sequential(
             normalization(ch),
             conv_nd(dims, model_channels, n_embed, 1),
             #nn.LogSoftmax(dim=1)  # change to cross_entropy and produce non-normalized logits
         )
+        # pdb.set_trace()
 
     def convert_to_fp16(self):
         """

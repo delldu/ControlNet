@@ -14,7 +14,9 @@ from ldm.modules.diffusionmodules.util import (
 from einops import rearrange, repeat
 from torchvision.utils import make_grid
 from ldm.modules.attention import SpatialTransformer
-from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSequential, ResBlock, Downsample, AttentionBlock
+from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
+    CreateTimestepEmbedSequential, TimestepEmbedSequential, TimestepEmbedSequentialForNormal, TimestepEmbedSequentialForTimestepBlock, TimestepEmbedSequentialForSpatialTransformer, \
+    ResBlock, Downsample, AttentionBlock
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import log_txt_as_img, exists, instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
@@ -82,6 +84,7 @@ class ControlNet(nn.Module):
             use_linear_in_transformer=False,
     ):
         super().__init__()
+
         if use_spatial_transformer:
             assert context_dim is not None, 'Fool!! You forgot to include the dimension of your cross-attention conditioning...'
 
@@ -142,14 +145,15 @@ class ControlNet(nn.Module):
 
         self.input_blocks = nn.ModuleList(
             [
-                TimestepEmbedSequential(
+                CreateTimestepEmbedSequential(
                     conv_nd(dims, in_channels, model_channels, 3, padding=1)
                 )
             ]
         )
+
         self.zero_convs = nn.ModuleList([self.make_zero_conv(model_channels)]) # len(self.zero_convs) -- 12
 
-        self.input_hint_block = TimestepEmbedSequential(
+        self.input_hint_block = TimestepEmbedSequentialForNormal(
             conv_nd(dims, hint_channels, 16, 3, padding=1),
             nn.SiLU(),
             conv_nd(dims, 16, 16, 3, padding=1),
@@ -166,7 +170,6 @@ class ControlNet(nn.Module):
             nn.SiLU(),
             zero_module(conv_nd(dims, 256, model_channels, 3, padding=1))
         )
-        # TimestepEmbedSequential -- 
 
         self._feature_size = model_channels # 10880
         input_block_chans = [model_channels]
@@ -214,32 +217,49 @@ class ControlNet(nn.Module):
                                 use_checkpoint=use_checkpoint
                             )
                         )
+                # xxxx8888
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
-                # self.input_blocks -- 
+                # new_layers = []
+                # for lx in layers:
+                #     new_layers.append(CreateTimestepEmbedSequential(lx))
+                # self.input_blocks.append(nn.Sequential(*new_layers))
 
                 self.zero_convs.append(self.make_zero_conv(ch))
                 self._feature_size += ch
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
                 out_ch = ch
-                self.input_blocks.append(
-                    TimestepEmbedSequential(
-                        ResBlock(
-                            ch,
-                            time_embed_dim,
-                            dropout,
-                            out_channels=out_ch,
-                            dims=dims,
-                            use_checkpoint=use_checkpoint,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                            down=True,
-                        )
-                        if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch
-                        )
-                    )
-                )
+                # self.input_blocks.append(
+                #     TimestepEmbedSequential(
+                #         ResBlock(
+                #             ch,
+                #             time_embed_dim,
+                #             dropout,
+                #             out_channels=out_ch,
+                #             dims=dims,
+                #             use_checkpoint=use_checkpoint,
+                #             use_scale_shift_norm=use_scale_shift_norm,
+                #             down=True,
+                #         )
+                #         if resblock_updown
+                #         else Downsample(
+                #             ch, conv_resample, dims=dims, out_channels=out_ch
+                #         )
+                #     )
+                # )
+                if resblock_updown:
+                    lx = ResBlock(ch,
+                        time_embed_dim,
+                        dropout,
+                        out_channels=out_ch,
+                        dims=dims,
+                        use_checkpoint=use_checkpoint,
+                        use_scale_shift_norm=use_scale_shift_norm,
+                        down=True)
+                else:
+                    lx = Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
+                self.input_blocks.append(CreateTimestepEmbedSequential(lx))
+
                 ch = out_ch
                 input_block_chans.append(ch)
                 self.zero_convs.append(self.make_zero_conv(ch))
@@ -283,17 +303,46 @@ class ControlNet(nn.Module):
                 use_scale_shift_norm=use_scale_shift_norm,
             ),
         )
+        # layers = [
+        #     ResBlock(
+        #         ch,
+        #         time_embed_dim,
+        #         dropout,
+        #         dims=dims,
+        #         use_checkpoint=use_checkpoint,
+        #         use_scale_shift_norm=use_scale_shift_norm,
+        #     ),
+        #     AttentionBlock(
+        #         ch,
+        #         use_checkpoint=use_checkpoint,
+        #         num_heads=num_heads,
+        #         num_head_channels=dim_head,
+        #         use_new_attention_order=use_new_attention_order,
+        #     ) if not use_spatial_transformer else SpatialTransformer(  # always uses a self-attn
+        #         ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
+        #         disable_self_attn=disable_middle_self_attn, use_linear=use_linear_in_transformer,
+        #         use_checkpoint=use_checkpoint
+        #     ),
+        #     ResBlock(
+        #         ch,
+        #         time_embed_dim,
+        #         dropout,
+        #         dims=dims,
+        #         use_checkpoint=use_checkpoint,
+        #         use_scale_shift_norm=use_scale_shift_norm,
+        #     ),
+        # ]
+        # self.middle_block = nn.ModuleList()
+        # for lx in layers:
+        #     self.middle_block.append(CreateTimestepEmbedSequential(lx))
+
 
         self.middle_block_out = self.make_zero_conv(ch)
-        # (Pdb) self.middle_block_out
-        # TimestepEmbedSequential(
-        #   (0): Conv2d(1280, 1280, kernel_size=(1, 1), stride=(1, 1))
-        # )
         self._feature_size += ch # ==> 10880
 
 
     def make_zero_conv(self, channels):
-        return TimestepEmbedSequential(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
+        return TimestepEmbedSequentialForNormal(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
     # def forward(self, x, hint, timesteps, context, **kwargs):
     def forward(self, x, hint, timesteps, context):
@@ -326,15 +375,17 @@ class ControlNet(nn.Module):
         return outs # len(outs) -- 13
 
 
-
+# xxxx1111
 class ControlLDM(LatentDiffusion):
-
     def __init__(self, control_stage_config, control_key, only_mid_control, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.control_model = instantiate_from_config(control_stage_config)
         self.control_key = control_key
         self.only_mid_control = only_mid_control
         self.control_scales = [1.0] * 13
+        # control_key = 'hint'
+        # only_mid_control = False
+        # args = ()
 
     @torch.no_grad()
     def get_input(self, batch, k, bs=None, *args, **kwargs):
@@ -348,18 +399,25 @@ class ControlLDM(LatentDiffusion):
         return x, dict(c_crossattn=[c], c_concat=[control])
 
     def apply_model(self, x_noisy, t, cond, *args, **kwargs):
+        # x_noisy.size() -- [1, 4, 80, 64]
+        # pp t -- tensor([951], device='cuda:0')
+        # cond.keys() -- ['c_concat', 'c_crossattn']
+        # args -- (), kwargs -- {}
         assert isinstance(cond, dict)
+
         diffusion_model = self.model.diffusion_model
+        cond_txt = torch.cat(cond['c_crossattn'], 1) # cond['c_crossattn'][0].size() -- [1, 77, 1024]
+	    # ==> cond_txt.size() -- [1, 77, 1024]
 
-        cond_txt = torch.cat(cond['c_crossattn'], 1)
-
+        # cond['c_concat'][0].size() -- [1, 3, 640, 512]
         if cond['c_concat'] is None:
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
         else:
             control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
             control = [c * scale for c, scale in zip(control, self.control_scales)]
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
-
+        # self.only_mid_control -- False
+        # eps.size() -- [1, 4, 80, 64]
         return eps
 
     @torch.no_grad()
