@@ -1407,20 +1407,20 @@ class LatentDiffusion(DDPM):
     #     pdb.set_trace()
     #     return opt
 
-    @torch.no_grad()
-    def to_rgb(self, x):
-        x = x.float()
-        if not hasattr(self, "colorize"):
-            self.colorize = torch.randn(3, x.shape[1], 1, 1).to(x)
-        x = nn.functional.conv2d(x, weight=self.colorize)
-        x = 2. * (x - x.min()) / (x.max() - x.min()) - 1.
-        return x
+    # @torch.no_grad()
+    # def to_rgb(self, x):
+    #     x = x.float()
+    #     if not hasattr(self, "colorize"):
+    #         self.colorize = torch.randn(3, x.shape[1], 1, 1).to(x)
+    #     x = nn.functional.conv2d(x, weight=self.colorize)
+    #     x = 2. * (x - x.min()) / (x.max() - x.min()) - 1.
+    #     return x
 
 # xxxx1111
 class DiffusionWrapper(torch.nn.Module): # torch.nn.Module, pl.LightningModule
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()
-        self.sequential_cross_attn = diff_model_config.pop("sequential_crossattn", False)
+        # self.sequential_cross_attn = diff_model_config.pop("sequential_crossattn", False)
         self.diffusion_model = instantiate_from_config(diff_model_config)
         self.conditioning_key = conditioning_key
         assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']

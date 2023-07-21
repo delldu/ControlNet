@@ -400,7 +400,8 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
     #     control = control.to(memory_format=torch.contiguous_format).float()
     #     return x, dict(c_crossattn=[c], c_concat=[control])
 
-    def apply_model(self, x_noisy, t, cond, *args, **kwargs):
+    # def apply_model(self, x_noisy, t, cond, *args, **kwargs):
+    def apply_model(self, x_noisy, t, cond):
         # x_noisy.size() -- [1, 4, 80, 64]
         # pp t -- tensor([951], device='cuda:0')
         # cond.keys() -- ['c_concat', 'c_crossattn']
