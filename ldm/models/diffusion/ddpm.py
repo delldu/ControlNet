@@ -14,7 +14,7 @@ from einops import rearrange, repeat
 from functools import partial
 from tqdm import tqdm
 from ldm.util import exists, default, count_params, instantiate_from_config
-from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor
+from ldm.modules.diffusionmodules.util import make_beta_schedule
 
 import pdb
 
@@ -28,9 +28,7 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
     def __init__(self,
                  unet_config,
                  timesteps=1000,
-                 beta_schedule="linear",
-                 loss_type="l2",
-                 ignore_keys=[],
+                 # ignore_keys=[],
                  monitor="val/loss",
                  use_ema=True,
                  first_stage_key="image",
@@ -40,12 +38,8 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
                  linear_start=1e-4,
                  linear_end=2e-2,
                  cosine_s=8e-3,
-                 given_betas=None,
-                 v_posterior=0.,  # weight for choosing posterior variance as sigma = (1-v) * beta_tilde + v * beta
                  conditioning_key=None,
                  parameterization="eps",  # all assuming fixed variance schedules
-                 learn_logvar=False,
-                 logvar_init=0.,
                  ):
         super().__init__()
 
@@ -59,29 +53,20 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
         self.channels = channels
         self.model = DiffusionWrapper(unet_config, conditioning_key) # xxxx1111 ????
         count_params(self.model, verbose=True)
-        self.v_posterior = v_posterior
 
         if monitor is not None:
             self.monitor = monitor # 'val/loss_simple_ema'
 
-        self.register_schedule(given_betas=given_betas, beta_schedule=beta_schedule, timesteps=timesteps,
+        self.register_schedule(beta_schedule="linear", timesteps=timesteps,
                                linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s)
 
-        self.loss_type = loss_type
-        self.learn_logvar = learn_logvar
-        logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
-        if self.learn_logvar: # False
-            self.logvar = nn.Parameter(self.logvar, requires_grad=True)
-        else:
-            self.register_buffer('logvar', logvar)
+        logvar = torch.full(fill_value=0.0, size=(self.num_timesteps,))
+        self.register_buffer('logvar', logvar)
 
 
-    def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
+    def register_schedule(self, beta_schedule="linear", timesteps=1000,
                           linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
-        if exists(given_betas):
-            betas = given_betas
-        else:
-            betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end,
+        betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end,
                                        cosine_s=cosine_s)
         alphas = 1. - betas
         alphas_cumprod = np.cumprod(alphas, axis=0)
@@ -99,45 +84,23 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev', to_torch(alphas_cumprod_prev))
 
-        # calculations for diffusion q(x_t | x_{t-1}) and others
-        self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
-        self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
-        self.register_buffer('log_one_minus_alphas_cumprod', to_torch(np.log(1. - alphas_cumprod)))
-        self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod)))
-        self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
+        # # calculations for diffusion q(x_t | x_{t-1}) and others
+        # self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
+        # self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
+        # self.register_buffer('log_one_minus_alphas_cumprod', to_torch(np.log(1. - alphas_cumprod)))
+        # self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod)))
+        # self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
 
-        # calculations for posterior q(x_{t-1} | x_t, x_0)
-        posterior_variance = (1 - self.v_posterior) * betas * (1. - alphas_cumprod_prev) / (
-                1. - alphas_cumprod) + self.v_posterior * betas
-        # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
-        self.register_buffer('posterior_variance', to_torch(posterior_variance))
-        # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
-        self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
-        self.register_buffer('posterior_mean_coef1', to_torch(
-            betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
-        self.register_buffer('posterior_mean_coef2', to_torch(
-            (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
+        # # calculations for posterior q(x_{t-1} | x_t, x_0)
+        # # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
+        # self.register_buffer('posterior_variance', to_torch(posterior_variance))
+        # # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
+        # self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
+        # self.register_buffer('posterior_mean_coef1', to_torch(
+        #     betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
+        # self.register_buffer('posterior_mean_coef2', to_torch(
+        #     (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
-        # if self.parameterization == "eps":
-        #     lvlb_weights = self.betas ** 2 / (
-        #             2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
-        # elif self.parameterization == "x0":
-        #     lvlb_weights = 0.5 * np.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
-        # elif self.parameterization == "v":
-        #     lvlb_weights = torch.ones_like(self.betas ** 2 / (
-        #             2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod)))
-        # else:
-        #     raise NotImplementedError("mu not supported")
-        # lvlb_weights[0] = lvlb_weights[1]
-        # self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
-        # assert not torch.isnan(self.lvlb_weights).all()
-
-
-    # def predict_start_from_noise(self, x_t, t, noise):
-    #     return (
-    #             extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-    #             extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
-    #     )
 
 class LatentDiffusion(DDPM):
     """main class"""
@@ -155,7 +118,6 @@ class LatentDiffusion(DDPM):
                  *args, **kwargs):
         # num_timesteps_cond = 1
         # cond_stage_key = 'txt'
-        # conditioning_key = 'crossattn'
         # scale_factor = 0.18215
         # args = ()
         # (Pdb) kwargs
@@ -166,15 +128,8 @@ class LatentDiffusion(DDPM):
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
-        # for backwards compatibility after implementation of DiffusionWrapper
-        if conditioning_key is None:
-            conditioning_key = 'concat' if concat_mode else 'crossattn'
-        if cond_stage_config == '__is_unconditional__': # and not self.force_null_conditioning:
-            conditioning_key = None
-        ckpt_path = kwargs.pop("ckpt_path", None)
-        reset_num_ema_updates = kwargs.pop("reset_num_ema_updates", False)
-        ignore_keys = kwargs.pop("ignore_keys", [])
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
+
         self.concat_mode = concat_mode
         self.cond_stage_trainable = cond_stage_trainable
         self.cond_stage_key = cond_stage_key
@@ -182,27 +137,13 @@ class LatentDiffusion(DDPM):
             self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
         except:
             self.num_downs = 0
-        if not scale_by_std:
+        if not scale_by_std: # True
             self.scale_factor = scale_factor
         else:
             self.register_buffer('scale_factor', torch.tensor(scale_factor))
         self.instantiate_first_stage(first_stage_config)
         self.instantiate_cond_stage(cond_stage_config)
         self.cond_stage_forward = cond_stage_forward
-
-    def make_cond_schedule(self, ):
-        self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
-        ids = torch.round(torch.linspace(0, self.num_timesteps - 1, self.num_timesteps_cond)).long()
-        self.cond_ids[:self.num_timesteps_cond] = ids
-
-    def register_schedule(self,
-                          given_betas=None, beta_schedule="linear", timesteps=1000,
-                          linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
-        super().register_schedule(given_betas, beta_schedule, timesteps, linear_start, linear_end, cosine_s)
-
-        self.shorten_cond_schedule = self.num_timesteps_cond > 1
-        if self.shorten_cond_schedule:
-            self.make_cond_schedule()
 
     def instantiate_first_stage(self, config):
         model = instantiate_from_config(config)

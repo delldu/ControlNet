@@ -397,7 +397,7 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
 	    # ==> cond_txt.size() -- [1, 77, 1024]
 
         # cond['c_concat'][0].size() -- [1, 3, 640, 512]
-        if cond['c_concat'] is None:
+        if cond['c_concat'] is None: # False
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
         else:
             control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)

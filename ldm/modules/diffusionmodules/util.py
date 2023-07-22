@@ -69,12 +69,6 @@ def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
     return sigmas, alphas, alphas_prev
 
 
-def extract_into_tensor(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
 def checkpoint(func, inputs, params, flag):
     """
     Evaluate a function without caching intermediate activations, allowing for
