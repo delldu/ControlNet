@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 import pdb
 
-from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like
+from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps
 
 
 class DDIMSampler(object):
@@ -162,7 +162,7 @@ class DDIMSampler(object):
 
         # Direction pointing to x_t
         dir_xt = (1. - a_prev - sigma_t**2).sqrt() * e_t
-        noise = sigma_t * noise_like(x.shape, device, repeat_noise) # * temperature, temperature == 1.0
+        noise = sigma_t * torch.randn(x.shape, device=device) # * temperature, temperature == 1.0
         x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
 
         return x_prev, pred_x0

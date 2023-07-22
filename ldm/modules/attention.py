@@ -209,7 +209,7 @@ class BasicTransformerBlock(nn.Module):
         x = self.ff(self.norm3(x)) + x
         return x
 
-
+# xxxx8888
 class SpatialTransformer(nn.Module):
     """
     Transformer block for image-like data.

@@ -21,10 +21,13 @@ from ldm.util import exists, instantiate_from_config
 import pdb
 
 class ControlledUnetModel(UNetModel):
+    '''
+        diffusion_model
+    '''
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control:bool=False):
         hs = []
         with torch.no_grad():
-            t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+            t_emb = timestep_embedding(timesteps, self.model_channels)
             emb = self.time_embed(t_emb)
             h = x.type(self.dtype)
             for module in self.input_blocks:
@@ -139,7 +142,7 @@ class ControlNet(nn.Module):
 
         self.input_blocks = nn.ModuleList(
             [
-                CreateTimestepEmbedSequential(
+                TimestepEmbedSequential(
                     conv_nd(dims, in_channels, model_channels, 3, padding=1)
                 )
             ]
@@ -223,36 +226,36 @@ class ControlNet(nn.Module):
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
                 out_ch = ch
-                # self.input_blocks.append(
-                #     TimestepEmbedSequential(
-                #         ResBlock(
-                #             ch,
-                #             time_embed_dim,
-                #             dropout,
-                #             out_channels=out_ch,
-                #             dims=dims,
-                #             use_checkpoint=use_checkpoint,
-                #             use_scale_shift_norm=use_scale_shift_norm,
-                #             down=True,
-                #         )
-                #         if resblock_updown
-                #         else Downsample(
-                #             ch, conv_resample, dims=dims, out_channels=out_ch
-                #         )
-                #     )
-                # )
-                if resblock_updown:
-                    lx = ResBlock(ch,
-                        time_embed_dim,
-                        dropout,
-                        out_channels=out_ch,
-                        dims=dims,
-                        use_checkpoint=use_checkpoint,
-                        use_scale_shift_norm=use_scale_shift_norm,
-                        down=True)
-                else:
-                    lx = Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
-                self.input_blocks.append(CreateTimestepEmbedSequential(lx))
+                self.input_blocks.append(
+                    TimestepEmbedSequential(
+                        ResBlock(
+                            ch,
+                            time_embed_dim,
+                            dropout,
+                            out_channels=out_ch,
+                            dims=dims,
+                            use_checkpoint=use_checkpoint,
+                            use_scale_shift_norm=use_scale_shift_norm,
+                            down=True,
+                        )
+                        if resblock_updown
+                        else Downsample(
+                            ch, conv_resample, dims=dims, out_channels=out_ch
+                        )
+                    )
+                )
+                # if resblock_updown:
+                #     lx = ResBlock(ch,
+                #         time_embed_dim,
+                #         dropout,
+                #         out_channels=out_ch,
+                #         dims=dims,
+                #         use_checkpoint=use_checkpoint,
+                #         use_scale_shift_norm=use_scale_shift_norm,
+                #         down=True)
+                # else:
+                #     lx = Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
+                # self.input_blocks.append(CreateTimestepEmbedSequential(lx))
 
                 ch = out_ch
                 input_block_chans.append(ch)
@@ -346,13 +349,14 @@ class ControlNet(nn.Module):
         # context.size() -- [1, 77, 768]
         # kwargs -- {}
 
-        t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+        t_emb = timestep_embedding(timesteps, self.model_channels)
         emb = self.time_embed(t_emb)
 
         guided_hint = self.input_hint_block(hint, emb, context)
 
         outs = []
 
+        # xxxx8888
         h = x.type(self.dtype)
         for module, zero_conv in zip(self.input_blocks, self.zero_convs):
             if guided_hint is not None:

@@ -505,15 +505,15 @@ class UNetModel(nn.Module):
         use_scale_shift_norm=False,
         resblock_updown=False,
         use_new_attention_order=False,
-        use_spatial_transformer=False,    # custom transformer support
+        use_spatial_transformer=True,     # custom transformer support
         transformer_depth=1,              # custom transformer support
         context_dim=None,                 # custom transformer support
         n_embed=None,                     # custom support for prediction of discrete ids into codebook of first stage vq model
-        legacy=True,
-        disable_self_attentions=None,
+        legacy=False,                     # False all for v1.5 and v2.1
+        # disable_self_attentions=None,
         num_attention_blocks=None,
         disable_middle_self_attn=False,
-        use_linear_in_transformer=False,
+        use_linear_in_transformer=False, # True for v2.1
     ):
         super().__init__()
         if use_spatial_transformer:
@@ -545,9 +545,9 @@ class UNetModel(nn.Module):
                 raise ValueError("provide num_res_blocks either as an int (globally constant) or "
                                  "as a list/tuple (per-level) with the same length as channel_mult")
             self.num_res_blocks = num_res_blocks
-        if disable_self_attentions is not None: # False
-            # should be a list of booleans, indicating whether to disable self-attention in TransformerBlocks or not
-            assert len(disable_self_attentions) == len(channel_mult)
+        # if disable_self_attentions is not None: # False
+        #     # should be a list of booleans, indicating whether to disable self-attention in TransformerBlocks or not
+        #     assert len(disable_self_attentions) == len(channel_mult)
         if num_attention_blocks is not None: # False
             assert len(num_attention_blocks) == len(self.num_res_blocks)
             assert all(map(lambda i: self.num_res_blocks[i] >= num_attention_blocks[i], range(len(num_attention_blocks))))
@@ -618,10 +618,11 @@ class UNetModel(nn.Module):
                     if legacy:
                         #num_heads = 1
                         dim_head = ch // num_heads if use_spatial_transformer else num_head_channels
-                    if exists(disable_self_attentions):
-                        disabled_sa = disable_self_attentions[level]
-                    else:
-                        disabled_sa = False
+                    # if exists(disable_self_attentions):
+                    #     disabled_sa = disable_self_attentions[level]
+                    # else:
+                    #     disabled_sa = False
+                    # disabled_sa = False
 
                     if not exists(num_attention_blocks) or nr < num_attention_blocks[level]: # True
                         layers.append(
@@ -633,7 +634,7 @@ class UNetModel(nn.Module):
                                 use_new_attention_order=use_new_attention_order,
                             ) if not use_spatial_transformer else SpatialTransformer(
                                 ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
-                                disable_self_attn=disabled_sa, use_linear=use_linear_in_transformer,
+                                disable_self_attn=False, use_linear=use_linear_in_transformer,
                                 use_checkpoint=use_checkpoint
                             )
                         )
@@ -746,10 +747,11 @@ class UNetModel(nn.Module):
                     if legacy:
                         #num_heads = 1
                         dim_head = ch // num_heads if use_spatial_transformer else num_head_channels
-                    if exists(disable_self_attentions):
-                        disabled_sa = disable_self_attentions[level]
-                    else:
-                        disabled_sa = False
+                    # if exists(disable_self_attentions):
+                    #     disabled_sa = disable_self_attentions[level]
+                    # else:
+                    #     disabled_sa = False
+                    # disabled_sa = False
 
                     if not exists(num_attention_blocks) or i < num_attention_blocks[level]:
                         layers.append(
@@ -761,7 +763,7 @@ class UNetModel(nn.Module):
                                 use_new_attention_order=use_new_attention_order,
                             ) if not use_spatial_transformer else SpatialTransformer(
                                 ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
-                                disable_self_attn=disabled_sa, use_linear=use_linear_in_transformer,
+                                disable_self_attn=False, use_linear=use_linear_in_transformer,
                                 use_checkpoint=use_checkpoint
                             )
                         )
@@ -827,7 +829,7 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
         hs = []
-        t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+        t_emb = timestep_embedding(timesteps, self.model_channels)
         emb = self.time_embed(t_emb)
 
         if self.num_classes is not None:
