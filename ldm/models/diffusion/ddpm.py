@@ -10,9 +10,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pytorch_lightning as pl
-from einops import rearrange, repeat
+from einops import rearrange
 from functools import partial
-from tqdm import tqdm
 from ldm.util import exists, default, count_params, instantiate_from_config
 from ldm.modules.diffusionmodules.util import make_beta_schedule
 
@@ -83,23 +82,6 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
         self.register_buffer('betas', to_torch(betas))
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev', to_torch(alphas_cumprod_prev))
-
-        # # calculations for diffusion q(x_t | x_{t-1}) and others
-        # self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
-        # self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
-        # self.register_buffer('log_one_minus_alphas_cumprod', to_torch(np.log(1. - alphas_cumprod)))
-        # self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod)))
-        # self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
-
-        # # calculations for posterior q(x_{t-1} | x_t, x_0)
-        # # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
-        # self.register_buffer('posterior_variance', to_torch(posterior_variance))
-        # # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
-        # self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
-        # self.register_buffer('posterior_mean_coef1', to_torch(
-        #     betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
-        # self.register_buffer('posterior_mean_coef2', to_torch(
-        #     (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
 
 class LatentDiffusion(DDPM):

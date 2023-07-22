@@ -1,4 +1,3 @@
-import einops
 import torch
 import torch.nn as nn
 import pdb
@@ -10,7 +9,6 @@ from ldm.modules.diffusionmodules.util import (
     timestep_embedding,
 )
 
-from einops import rearrange, repeat
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     CreateTimestepEmbedSequential, TimestepEmbedSequential, TimestepEmbedSequentialForNormal, TimestepEmbedSequentialForTimestepBlock, TimestepEmbedSequentialForSpatialTransformer, \

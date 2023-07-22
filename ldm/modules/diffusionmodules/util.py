@@ -13,7 +13,6 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
-from einops import repeat
 
 from ldm.util import instantiate_from_config
 

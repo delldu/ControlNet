@@ -18,9 +18,6 @@ def load_state_dict(ckpt_path, location='cpu'):
         state_dict = get_state_dict(torch.load(ckpt_path, map_location=torch.device(location)))
     state_dict = get_state_dict(state_dict)
 
-    # if "logvar" in state_dict.keys():
-    #     del state_dict['logvar']
-
     print(f'Loaded state_dict from [{ckpt_path}]')
     return state_dict
 
