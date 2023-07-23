@@ -240,41 +240,19 @@ class MemoryEfficientAttnBlock(nn.Module):
         k = self.BxCxHxW_BxHWxC(k)
         v = self.BxCxHxW_BxHWxC(v)
 
-        # q.size() -- [1, 5120, 512]
-        # xxxx8888
-        q, k, v = map(
-            lambda t: t.unsqueeze(3) # [1, 5120, 512, 1]
-            .reshape(B, t.shape[1], 1, C)
-            .permute(0, 2, 1, 3)
-            .reshape(B * 1, t.shape[1], C)
-            .contiguous(),
-            (q, k, v),
-        )
-        # q = (
-        #     q.unsqueeze(3) # [1, 5120, 512, 1]
-        #     .reshape(B, H * W, 1, C)
+        # q, k, v = map(
+        #     lambda t: t.unsqueeze(3) # [1, 5120, 512] --> [1, 5120, 512, 1]
+        #     .reshape(B, t.shape[1], 1, C)
         #     .permute(0, 2, 1, 3)
-        #     .reshape(B * 1, H * W, C)
+        #     .reshape(B * 1, t.shape[1], C)
         #     .contiguous(),
+        #     (q, k, v),
         # )
-        # k = (
-        #     k.unsqueeze(3) # [1, 5120, 512, 1]
-        #     .reshape(B, H * W, 1, C)
-        #     .permute(0, 2, 1, 3)
-        #     .reshape(B * 1, H * W, C)
-        #     .contiguous(),
-        # )
-        # v = (
-        #     v.unsqueeze(3) # [1, 5120, 512, 1]
-        #     .reshape(B, H * W, 1, C)
-        #     .permute(0, 2, 1, 3)
-        #     .reshape(B * 1, H * W, C)
-        #     .contiguous(),
-        # )
-        # q.size() -- [1, 5120, 512]
+        q = q.unsqueeze(3).reshape(B, q.shape[1], 1, C).permute(0, 2, 1, 3).reshape(B * 1, q.shape[1], C).contiguous()
+        k = k.unsqueeze(3).reshape(B, k.shape[1], 1, C).permute(0, 2, 1, 3).reshape(B * 1, k.shape[1], C).contiguous()
+        v = v.unsqueeze(3).reshape(B, v.shape[1], 1, C).permute(0, 2, 1, 3).reshape(B * 1, v.shape[1], C).contiguous()
 
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
-
         out = (
             out.unsqueeze(0)
             .reshape(B, 1, out.shape[1], C)

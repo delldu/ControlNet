@@ -6,6 +6,7 @@ from torch import nn, einsum
 # from einops import rearrange
 from einops.layers.torch import Rearrange
 from typing import Optional, Any
+import pdb
 
 try:
     import xformers
@@ -146,24 +147,31 @@ class MemoryEfficientCrossAttention(nn.Module):
         k = self.to_k(context)
         v = self.to_v(context)
 
-        b, _, _ = q.shape
-        q, k, v = map(
-            lambda t: t.unsqueeze(3)
-            .reshape(b, t.shape[1], self.heads, self.dim_head)
-            .permute(0, 2, 1, 3)
-            .reshape(b * self.heads, t.shape[1], self.dim_head)
-            .contiguous(),
-            (q, k, v),
-        )
+        B, HW, C = q.shape # [1, 5120, 320]
+        # self.heads -- 8, self.dim_head -- 40
+        # q, k, v = map(
+        #     lambda t: t.unsqueeze(3)
+        #     .reshape(B, t.shape[1], self.heads, self.dim_head)
+        #     .permute(0, 2, 1, 3)
+        #     .reshape(B * self.heads, t.shape[1], self.dim_head)
+        #     .contiguous(),
+        #     (q, k, v),
+        # )
+        q = q.unsqueeze(3).reshape(B, q.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+            .reshape(B * self.heads, q.shape[1], self.dim_head).contiguous()
+        k = k.unsqueeze(3).reshape(B, k.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+            .reshape(B * self.heads, k.shape[1], self.dim_head).contiguous()
+        v = v.unsqueeze(3).reshape(B, v.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+            .reshape(B * self.heads, v.shape[1], self.dim_head).contiguous()
 
         # actually compute the attention, what we cannot get enough of
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         out = (
             out.unsqueeze(0)
-            .reshape(b, self.heads, out.shape[1], self.dim_head)
+            .reshape(B, self.heads, out.shape[1], self.dim_head)
             .permute(0, 2, 1, 3)
-            .reshape(b, out.shape[1], self.heads * self.dim_head)
+            .reshape(B, out.shape[1], self.heads * self.dim_head)
         )
         return self.to_out(out)
 

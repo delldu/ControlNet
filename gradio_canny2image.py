@@ -26,6 +26,7 @@ model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', locatio
 # model.control_model.load_state_dict(load_state_dict('./models/control_v11p_sd21_canny.safetensors', location='cpu'))
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
+pdb.set_trace()
 
 # model -- ControlLDM(...),
 # model.model -- DiffusionWrapper(...)
