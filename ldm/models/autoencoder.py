@@ -1,11 +1,10 @@
 import torch
-import pytorch_lightning as pl
 from ldm.modules.diffusionmodules.model import Encoder, Decoder
 from ldm.util import instantiate_from_config
 
 import pdb
 
-class AutoencoderKL(torch.nn.Module): # torch.nn.Module, pl.LightningModule
+class AutoencoderKL(torch.nn.Module): 
     def __init__(self,
                  ddconfig,
                  lossconfig,
@@ -30,8 +29,6 @@ class AutoencoderKL(torch.nn.Module): # torch.nn.Module, pl.LightningModule
         # self.post_quant_conv -- Conv2d(4, 4, kernel_size=(1, 1), stride=(1, 1))
 
         self.embed_dim = embed_dim
-        # if monitor is not None:
-        #     self.monitor = monitor
 
     # xxxx1111
     def decode(self, z):

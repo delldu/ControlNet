@@ -9,16 +9,12 @@ https://github.com/CompVis/taming-transformers
 import torch
 import torch.nn as nn
 import numpy as np
-import pytorch_lightning as pl
-# from einops import rearrange
-# from einops.layers.torch import Rearrange
 from functools import partial
-from ldm.util import exists, default, count_params, instantiate_from_config
+from ldm.util import count_params, instantiate_from_config
 from ldm.modules.diffusionmodules.util import make_beta_schedule
-
 import pdb
 
-class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
+class DDPM(torch.nn.Module):
     # classic DDPM with Gaussian diffusion, in image space
     def __init__(self,
                  unet_config,
