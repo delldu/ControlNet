@@ -28,7 +28,6 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
     def __init__(self,
                  unet_config,
                  timesteps=1000,
-                 # ignore_keys=[],
                  monitor="val/loss",
                  use_ema=True,
                  first_stage_key="image",
@@ -91,11 +90,8 @@ class LatentDiffusion(DDPM):
                  num_timesteps_cond=None,
                  cond_stage_key="image",
                  cond_stage_trainable=False,
-                 # concat_mode=True,
-                 # cond_stage_forward=None,
                  conditioning_key='crossattn',
                  scale_factor=1.0,
-                 scale_by_std=False,
                  *args, **kwargs):
         # num_timesteps_cond = 1
         # cond_stage_key = 'txt'
@@ -106,26 +102,16 @@ class LatentDiffusion(DDPM):
         #     'first_stage_key': 'jpg', 'image_size': 64, 'channels': 4, 'monitor': 'val/loss_simple_ema', 
         #     'use_ema': False, 'unet_config': {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}}
 
-        # self.num_timesteps_cond = default(num_timesteps_cond, 1)
-        self.scale_by_std = scale_by_std
-        # assert self.num_timesteps_cond <= kwargs['timesteps']
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
 
-        # self.concat_mode = concat_mode
-        self.cond_stage_trainable = cond_stage_trainable
         self.cond_stage_key = cond_stage_key
         try:
             self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
         except:
             self.num_downs = 0
-        if not scale_by_std: # True
-            self.scale_factor = scale_factor
-        else:
-            self.register_buffer('scale_factor', torch.tensor(scale_factor))
+        self.scale_factor = scale_factor
         self.instantiate_first_stage(first_stage_config)
         self.instantiate_cond_stage(cond_stage_config)
-        # self.cond_stage_forward = cond_stage_forward
-
 
 
     def instantiate_first_stage(self, config):
