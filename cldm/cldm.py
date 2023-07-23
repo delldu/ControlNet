@@ -12,7 +12,7 @@ from ldm.modules.diffusionmodules.util import (
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     TimestepEmbedSequential, TimestepEmbedSequentialForNormal, \
-    ResBlock, Downsample, AttentionBlock
+    ResBlock, Downsample
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import exists, instantiate_from_config
 
@@ -27,7 +27,7 @@ class ControlledUnetModel(UNetModel):
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels)
             emb = self.time_embed(t_emb)
-            h = x.type(self.dtype)
+            h = x
             for module in self.input_blocks:
                 h = module(h, emb, context)
                 hs.append(h)
@@ -61,7 +61,6 @@ class ControlNet(nn.Module):
             conv_resample=True,
             dims=2,
             use_checkpoint=True,
-            use_fp16=False,
             num_heads=8,
             num_head_channels=-1,
             num_heads_upsample=8,
@@ -103,11 +102,9 @@ class ControlNet(nn.Module):
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
         self.use_checkpoint = use_checkpoint
-        self.dtype = torch.float16 if use_fp16 else torch.float32
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
-        self.predict_codebook_ids = n_embed is not None
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -142,7 +139,6 @@ class ControlNet(nn.Module):
             zero_module(conv_nd(dims, 256, model_channels, 3, padding=1))
         )
 
-        self._feature_size = model_channels # 10880
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
@@ -173,7 +169,6 @@ class ControlNet(nn.Module):
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
 
                 self.zero_convs.append(self.make_zero_conv(ch))
-                self._feature_size += ch
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
                 out_ch = ch
@@ -185,7 +180,6 @@ class ControlNet(nn.Module):
                 input_block_chans.append(ch)
                 self.zero_convs.append(self.make_zero_conv(ch))
                 ds *= 2
-                self._feature_size += ch
 
         if num_head_channels == -1: # True
             dim_head = ch // num_heads # 160
@@ -211,7 +205,6 @@ class ControlNet(nn.Module):
         )
 
         self.middle_block_out = self.make_zero_conv(ch)
-        self._feature_size += ch # ==> 10880
 
 
     def make_zero_conv(self, channels):
@@ -232,8 +225,7 @@ class ControlNet(nn.Module):
 
         outs = []
 
-        # xxxx8888
-        h = x.type(self.dtype)
+        h = x
         for module, zero_conv in zip(self.input_blocks, self.zero_convs):
             if guided_hint is not None:
                 h = module(h, emb, context)

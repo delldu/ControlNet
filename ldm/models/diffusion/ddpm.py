@@ -18,11 +18,6 @@ from ldm.modules.diffusionmodules.util import make_beta_schedule
 
 import pdb
 
-# __conditioning_keys__ = {'concat': 'c_concat',
-#                          'crossattn': 'c_crossattn',
-#                          'adm': 'y'}
-
-
 class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
     # classic DDPM with Gaussian diffusion, in image space
     def __init__(self,
@@ -43,7 +38,6 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
 
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
-        # print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
         self.cond_stage_model = None
         self.log_every_t = log_every_t
         self.first_stage_key = first_stage_key
@@ -91,16 +85,12 @@ class LatentDiffusion(DDPM):
                  cond_stage_key="image",
                  cond_stage_trainable=False,
                  conditioning_key='crossattn',
+                 monitor ='val/loss_simple_ema',
                  scale_factor=1.0,
                  *args, **kwargs):
         # num_timesteps_cond = 1
         # cond_stage_key = 'txt'
         # scale_factor = 0.18215
-        # args = ()
-        # (Pdb) kwargs
-        # {'linear_start': 0.00085, 'linear_end': 0.012, 'log_every_t': 200, 'timesteps': 1000, 
-        #     'first_stage_key': 'jpg', 'image_size': 64, 'channels': 4, 'monitor': 'val/loss_simple_ema', 
-        #     'use_ema': False, 'unet_config': {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}}
 
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
 
@@ -137,8 +127,6 @@ class LatentDiffusion(DDPM):
     def decode_first_stage(self, z):
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)
-
-
 
 # xxxx1111
 class DiffusionWrapper(torch.nn.Module): # torch.nn.Module, pl.LightningModule

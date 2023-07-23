@@ -18,28 +18,6 @@ except:
     XFORMERS_IS_AVAILBLE = False
     print("No module 'xformers'. Proceeding without it.")
 
-
-def get_timestep_embedding(timesteps, embedding_dim):
-    """
-    This matches the implementation in Denoising Diffusion Probabilistic Models:
-    From Fairseq.
-    Build sinusoidal embeddings.
-    This matches the implementation in tensor2tensor, but differs slightly
-    from the description in Section 3.5 of "Attention Is All You Need".
-    """
-    assert len(timesteps.shape) == 1
-
-    half_dim = embedding_dim // 2
-    emb = math.log(10000) / (half_dim - 1)
-    emb = torch.exp(torch.arange(half_dim, dtype=torch.float32) * -emb)
-    emb = emb.to(device=timesteps.device)
-    emb = timesteps.float()[:, None] * emb[None, :]
-    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
-    if embedding_dim % 2 == 1:  # zero pad
-        emb = torch.nn.functional.pad(emb, (0,1,0,0))
-    return emb
-
-
 def nonlinearity(x):
     # swish
     return x*torch.sigmoid(x)
@@ -245,8 +223,8 @@ class MemoryEfficientAttnBlock(nn.Module):
                                         stride=1,
                                         padding=0)
         self.attention_op: Optional[Any] = None
-        self.BXCXHXW_BXHWXC = Rearrange('b c h w -> b (h w) c')
-        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
+        self.BxCxHxW_BxHWxC = Rearrange('b c h w -> b (h w) c')
+        self.BxHxWxC_BxCxHxW = Rearrange('b h w c -> b c h w')
 
     def forward(self, x):
         h_ = x
@@ -258,9 +236,9 @@ class MemoryEfficientAttnBlock(nn.Module):
         # compute attention
         B, C, H, W = q.shape # (1, 512, 80, 64)
         # q, k, v = map(lambda x: rearrange(x, 'b c h w -> b (h w) c'), (q, k, v))
-        q = self.BXCXHXW_BXHWXC(q)
-        k = self.BXCXHXW_BXHWXC(k)
-        v = self.BXCXHXW_BXHWXC(v)
+        q = self.BxCxHxW_BxHWxC(q)
+        k = self.BxCxHxW_BxHWxC(k)
+        v = self.BxCxHxW_BxHWxC(v)
 
         # q.size() -- [1, 5120, 512]
         # xxxx8888
@@ -304,7 +282,7 @@ class MemoryEfficientAttnBlock(nn.Module):
             .reshape(B, out.shape[1], C)
         )
         # out = rearrange(out, 'b (h w) c -> b c h w', b=B, h=H, w=W, c=C)
-        out = self.BXHXWXC_BXCXHXW(out.reshape(B, H, W, C))
+        out = self.BxHxWxC_BxCxHxW(out.reshape(B, H, W, C))
         out = self.proj_out(out)
         return x+out
 
@@ -312,16 +290,16 @@ class MemoryEfficientAttnBlock(nn.Module):
 class MemoryEfficientCrossAttentionWrapper(MemoryEfficientCrossAttention):
     def __init__(self):
         suprt(MemoryEfficientCrossAttentionWrapper, self).__init__()
-        self.BXCXHXW_BXHWXC = Rearrange('b c h w -> b (h w) c')
-        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
+        self.BxCxHxW_BxHWxC = Rearrange('b c h w -> b (h w) c')
+        self.BxHxWxC_BxCxHxW = Rearrange('b h w c -> b c h w')
 
     def forward(self, x, context=None, mask=None):
         b, c, h, w = x.shape
         # x = rearrange(x, 'b c h w -> b (h w) c')
-        x = self.BXCXHXW_BXHWXC(x)
+        x = self.BxCxHxW_BxHWxC(x)
         out = super().forward(x, context=context, mask=mask)
         # out = rearrange(out, 'b (h w) c -> b c h w', h=h, w=w, c=c)
-        out = self.BXHXWXC_BXCXHXW(out.reshape(b, h, w, c))
+        out = self.BxHxWxC_BxCxHxW(out.reshape(b, h, w, c))
         return x + out
 
 
@@ -347,8 +325,8 @@ def make_attn(in_channels, attn_type="vanilla", attn_kwargs=None):
 
 class Encoder(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
-                 attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
-                 resolution, z_channels, double_z=True, use_linear_attn=False, attn_type="vanilla",
+                 attn_resolutions, dropout=0.0, in_channels,
+                 resolution, z_channels, attn_type="vanilla",
                  **ignore_kwargs):
         super().__init__()
         # ch = 128
@@ -361,7 +339,6 @@ class Encoder(nn.Module):
         # z_channels = 4
         # ignore_kwargs = {}
         
-        if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = 0
         self.num_resolutions = len(ch_mult)
@@ -397,7 +374,7 @@ class Encoder(nn.Module):
             down.block = block
             down.attn = attn
             if i_level != self.num_resolutions-1:
-                down.downsample = Downsample(block_in, resamp_with_conv)
+                down.downsample = Downsample(block_in, True)
                 curr_res = curr_res // 2
             self.down.append(down)
 
@@ -416,7 +393,7 @@ class Encoder(nn.Module):
         # end
         self.norm_out = Normalize(block_in)
         self.conv_out = torch.nn.Conv2d(block_in,
-                                        2*z_channels if double_z else z_channels,
+                                        2*z_channels,
                                         kernel_size=3,
                                         stride=1,
                                         padding=1)
@@ -451,8 +428,8 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
-                 attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
-                 resolution, z_channels, give_pre_end=False, tanh_out=False, use_linear_attn=False,
+                 attn_resolutions, dropout=0.0, in_channels,
+                 resolution, z_channels,  
                  attn_type="vanilla", **ignorekwargs):
         super().__init__()
         # ch = 128
@@ -463,17 +440,13 @@ class Decoder(nn.Module):
         # in_channels = 3
         # resolution = 256
         # z_channels = 4
-        # ignorekwargs = {'double_z': True}
 
-        if use_linear_attn: attn_type = "linear"
         self.ch = ch
         self.temb_ch = 0
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
         self.in_channels = in_channels
-        self.give_pre_end = give_pre_end
-        self.tanh_out = tanh_out
 
         # compute in_ch_mult, block_in and curr_res at lowest res
         in_ch_mult = (1,)+tuple(ch_mult)
@@ -519,7 +492,7 @@ class Decoder(nn.Module):
             up.block = block
             up.attn = attn
             if i_level != 0:
-                up.upsample = Upsample(block_in, resamp_with_conv)
+                up.upsample = Upsample(block_in, True)
                 curr_res = curr_res * 2
             self.up.insert(0, up) # prepend to get consistent order
 
@@ -555,12 +528,7 @@ class Decoder(nn.Module):
                 h = self.up[i_level].upsample(h)
 
         # end
-        if self.give_pre_end: # False
-            return h
-
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
-        if self.tanh_out: # False
-            h = torch.tanh(h)
         return h
