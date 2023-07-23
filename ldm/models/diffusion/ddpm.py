@@ -10,7 +10,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pytorch_lightning as pl
-from einops import rearrange
+# from einops import rearrange
+from einops.layers.torch import Rearrange
 from functools import partial
 from ldm.util import exists, default, count_params, instantiate_from_config
 from ldm.modules.diffusionmodules.util import make_beta_schedule
@@ -127,6 +128,9 @@ class LatentDiffusion(DDPM):
         self.instantiate_cond_stage(cond_stage_config)
         self.cond_stage_forward = cond_stage_forward
 
+        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
+
+
     def instantiate_first_stage(self, config):
         model = instantiate_from_config(config)
         self.first_stage_model = model.eval()
@@ -168,7 +172,8 @@ class LatentDiffusion(DDPM):
             if z.dim() == 4:
                 z = torch.argmax(z.exp(), dim=1).long()
             z = self.first_stage_model.quantize.get_codebook_entry(z, shape=None)
-            z = rearrange(z, 'b h w c -> b c h w').contiguous()
+            # z = rearrange(z, 'b h w c -> b c h w').contiguous()
+            z = self.BXHXWXC_BXCXHXW(z).contiguous()
 
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)

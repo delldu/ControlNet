@@ -2,8 +2,9 @@
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-from einops import rearrange
+from einops.layers.torch import Rearrange
 from typing import Optional, Any
 
 from ldm.modules.attention import MemoryEfficientCrossAttention
@@ -60,7 +61,7 @@ class Upsample(nn.Module):
                                         padding=1)
 
     def forward(self, x):
-        x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+        x = F.interpolate(x, scale_factor=2.0, mode="nearest")
         if self.with_conv:
             x = self.conv(x)
         return x
@@ -81,10 +82,10 @@ class Downsample(nn.Module):
     def forward(self, x):
         if self.with_conv:
             pad = (0,1,0,1)
-            x = torch.nn.functional.pad(x, pad, mode="constant", value=0.0)
+            x = F.pad(x, pad, mode="constant", value=0.0)
             x = self.conv(x)
         else:
-            x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+            x = F.avg_pool2d(x, kernel_size=2, stride=2)
         return x
 
 
@@ -199,7 +200,7 @@ class AttnBlock(nn.Module):
         k = k.reshape(b,c,h*w) # b,c,hw
         w_ = torch.bmm(q,k)     # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
         w_ = w_ * (int(c)**(-0.5))
-        w_ = torch.nn.functional.softmax(w_, dim=2)
+        w_ = F.softmax(w_, dim=2)
 
         # attend to values
         v = v.reshape(b,c,h*w)
@@ -244,6 +245,8 @@ class MemoryEfficientAttnBlock(nn.Module):
                                         stride=1,
                                         padding=0)
         self.attention_op: Optional[Any] = None
+        self.BXCXHXW_BXHWXC = Rearrange('b c h w -> b (h w) c')
+        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
 
     def forward(self, x):
         h_ = x
@@ -253,17 +256,45 @@ class MemoryEfficientAttnBlock(nn.Module):
         v = self.v(h_)
 
         # compute attention
-        B, C, H, W = q.shape
-        q, k, v = map(lambda x: rearrange(x, 'b c h w -> b (h w) c'), (q, k, v)) # xxxx8888
+        B, C, H, W = q.shape # (1, 512, 80, 64)
+        # q, k, v = map(lambda x: rearrange(x, 'b c h w -> b (h w) c'), (q, k, v))
+        q = self.BXCXHXW_BXHWXC(q)
+        k = self.BXCXHXW_BXHWXC(k)
+        v = self.BXCXHXW_BXHWXC(v)
 
+        # q.size() -- [1, 5120, 512]
+        # xxxx8888
         q, k, v = map(
-            lambda t: t.unsqueeze(3)
+            lambda t: t.unsqueeze(3) # [1, 5120, 512, 1]
             .reshape(B, t.shape[1], 1, C)
             .permute(0, 2, 1, 3)
             .reshape(B * 1, t.shape[1], C)
             .contiguous(),
             (q, k, v),
         )
+        # q = (
+        #     q.unsqueeze(3) # [1, 5120, 512, 1]
+        #     .reshape(B, H * W, 1, C)
+        #     .permute(0, 2, 1, 3)
+        #     .reshape(B * 1, H * W, C)
+        #     .contiguous(),
+        # )
+        # k = (
+        #     k.unsqueeze(3) # [1, 5120, 512, 1]
+        #     .reshape(B, H * W, 1, C)
+        #     .permute(0, 2, 1, 3)
+        #     .reshape(B * 1, H * W, C)
+        #     .contiguous(),
+        # )
+        # v = (
+        #     v.unsqueeze(3) # [1, 5120, 512, 1]
+        #     .reshape(B, H * W, 1, C)
+        #     .permute(0, 2, 1, 3)
+        #     .reshape(B * 1, H * W, C)
+        #     .contiguous(),
+        # )
+        # q.size() -- [1, 5120, 512]
+
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         out = (
@@ -272,17 +303,25 @@ class MemoryEfficientAttnBlock(nn.Module):
             .permute(0, 2, 1, 3)
             .reshape(B, out.shape[1], C)
         )
-        out = rearrange(out, 'b (h w) c -> b c h w', b=B, h=H, w=W, c=C)
+        # out = rearrange(out, 'b (h w) c -> b c h w', b=B, h=H, w=W, c=C)
+        out = self.BXHXWXC_BXCXHXW(out.reshape(B, H, W, C))
         out = self.proj_out(out)
         return x+out
 
 
 class MemoryEfficientCrossAttentionWrapper(MemoryEfficientCrossAttention):
+    def __init__(self):
+        suprt(MemoryEfficientCrossAttentionWrapper, self).__init__()
+        self.BXCXHXW_BXHWXC = Rearrange('b c h w -> b (h w) c')
+        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
+
     def forward(self, x, context=None, mask=None):
         b, c, h, w = x.shape
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        # x = rearrange(x, 'b c h w -> b (h w) c')
+        x = self.BXCXHXW_BXHWXC(x)
         out = super().forward(x, context=context, mask=mask)
-        out = rearrange(out, 'b (h w) c -> b c h w', h=h, w=w, c=c)
+        # out = rearrange(out, 'b (h w) c -> b c h w', h=h, w=w, c=c)
+        out = self.BXHXWXC_BXCXHXW(out.reshape(b, h, w, c))
         return x + out
 
 
@@ -441,8 +480,7 @@ class Decoder(nn.Module):
         block_in = ch*ch_mult[self.num_resolutions-1]
         curr_res = resolution // 2**(self.num_resolutions-1)
         self.z_shape = (1,z_channels,curr_res,curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(
-            self.z_shape, np.prod(self.z_shape)))
+        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(z_channels,

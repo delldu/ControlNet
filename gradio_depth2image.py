@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import random
 
+from einops.layers.torch import Rearrange
 from pytorch_lightning import seed_everything
 from annotator.util import resize_image, HWC3
 from annotator.midas import MidasDetector

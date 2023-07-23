@@ -1,5 +1,6 @@
 import torch
 import einops
+from einops.layers.torch import Rearrange
 
 import ldm.modules.encoders.modules
 import ldm.modules.attention

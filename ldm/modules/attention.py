@@ -4,10 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn, einsum
 from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
 from typing import Optional, Any
-
-from ldm.modules.diffusionmodules.util import checkpoint
-
 
 try:
     import xformers
@@ -95,7 +93,7 @@ class CrossAttention(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, x, context=None, mask=None):
+    def forward(self, x, context=None):
         h = self.heads
 
         q = self.to_q(x)
@@ -115,12 +113,6 @@ class CrossAttention(nn.Module):
         
         del q, k
     
-        if exists(mask):
-            mask = rearrange(mask, 'b ... -> b (...)')
-            max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, 'b j -> (b h) () j', h=h)
-            sim.masked_fill_(~mask, max_neg_value)
-
         # attention, what we cannot get enough of
         sim = sim.softmax(dim=-1)
 
@@ -148,7 +140,7 @@ class MemoryEfficientCrossAttention(nn.Module):
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
         self.attention_op: Optional[Any] = None
 
-    def forward(self, x, context=None, mask=None):
+    def forward(self, x, context=None):
         q = self.to_q(x)
         context = default(context, x)
         k = self.to_k(context)
@@ -167,8 +159,6 @@ class MemoryEfficientCrossAttention(nn.Module):
         # actually compute the attention, what we cannot get enough of
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
-        if exists(mask):
-            raise NotImplementedError
         out = (
             out.unsqueeze(0)
             .reshape(b, self.heads, out.shape[1], self.dim_head)
@@ -183,33 +173,26 @@ class BasicTransformerBlock(nn.Module):
         "softmax": CrossAttention,  # vanilla attention
         "softmax-xformers": MemoryEfficientCrossAttention
     }
-    def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True,
-                 disable_self_attn=False):
+    def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True):
         super().__init__()
         attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILBLE else "softmax"
         assert attn_mode in self.ATTENTION_MODES
         attn_cls = self.ATTENTION_MODES[attn_mode]
-        self.disable_self_attn = disable_self_attn
         self.attn1 = attn_cls(query_dim=dim, heads=n_heads, dim_head=d_head, dropout=dropout,
-                              context_dim=context_dim if self.disable_self_attn else None)  # is a self-attention if not self.disable_self_attn
+                              context_dim=None)  # is a self-attention if context is none
         self.ff = FeedForward(dim, dropout=dropout, glu=gated_ff)
         self.attn2 = attn_cls(query_dim=dim, context_dim=context_dim,
                               heads=n_heads, dim_head=d_head, dropout=dropout)  # is self-attn if context is none
         self.norm1 = nn.LayerNorm(dim)
         self.norm2 = nn.LayerNorm(dim)
         self.norm3 = nn.LayerNorm(dim)
-        self.checkpoint = checkpoint
 
     def forward(self, x, context=None):
-        return checkpoint(self._forward, (x, context), self.parameters(), self.checkpoint)
-
-    def _forward(self, x, context=None):
-        x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None) + x
+        x = self.attn1(self.norm1(x), context=None) + x
         x = self.attn2(self.norm2(x), context=context) + x
         x = self.ff(self.norm3(x)) + x
         return x
 
-# xxxx8888
 class SpatialTransformer(nn.Module):
     """
     Transformer block for image-like data.
@@ -221,8 +204,7 @@ class SpatialTransformer(nn.Module):
     """
     def __init__(self, in_channels, n_heads, d_head,
                  depth=1, dropout=0., context_dim=None,
-                 disable_self_attn=False, use_linear=False,
-                 use_checkpoint=True):
+                 use_linear=False):
         super().__init__()
         if exists(context_dim) and not isinstance(context_dim, list):
             context_dim = [context_dim]
@@ -239,8 +221,7 @@ class SpatialTransformer(nn.Module):
             self.proj_in = nn.Linear(in_channels, inner_dim)
 
         self.transformer_blocks = nn.ModuleList(
-            [BasicTransformerBlock(inner_dim, n_heads, d_head, dropout=dropout, context_dim=context_dim[d],
-                                   disable_self_attn=disable_self_attn, checkpoint=use_checkpoint)
+            [BasicTransformerBlock(inner_dim, n_heads, d_head, dropout=dropout, context_dim=context_dim[d])
                 for d in range(depth)]
         )
         if not use_linear:

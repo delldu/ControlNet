@@ -11,7 +11,7 @@ from ldm.modules.diffusionmodules.util import (
 
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
-    CreateTimestepEmbedSequential, TimestepEmbedSequential, TimestepEmbedSequentialForNormal, TimestepEmbedSequentialForTimestepBlock, TimestepEmbedSequentialForSpatialTransformer, \
+    TimestepEmbedSequential, TimestepEmbedSequentialForNormal, \
     ResBlock, Downsample, AttentionBlock
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import exists, instantiate_from_config
@@ -65,18 +65,12 @@ class ControlNet(nn.Module):
             num_heads=8,
             num_head_channels=-1,
             num_heads_upsample=8,
-            use_scale_shift_norm=False,
-            resblock_updown=False,
-            use_new_attention_order=False,
-            use_spatial_transformer=True,  # custom transformer support
+            use_spatial_transformer=True,  # True all for v1.5 and v2.1 custom transformer support
             transformer_depth=1,  # custom transformer support
             context_dim=768,  # custom transformer support
             n_embed=None,  # custom support for prediction of discrete ids into codebook of first stage vq model
             legacy=False,
-            disable_self_attentions=None,
-            num_attention_blocks=None,
-            disable_middle_self_attn=False,
-            use_linear_in_transformer=False,
+            use_linear_in_transformer=False, # True for v2.1, False for v1.5
     ):
         super().__init__()
 
@@ -102,23 +96,7 @@ class ControlNet(nn.Module):
         self.image_size = image_size
         self.in_channels = in_channels
         self.model_channels = model_channels
-        if isinstance(num_res_blocks, int): # True
-            self.num_res_blocks = len(channel_mult) * [num_res_blocks] # [2, 2, 2, 2]
-        else:
-            if len(num_res_blocks) != len(channel_mult):
-                raise ValueError("provide num_res_blocks either as an int (globally constant) or "
-                                 "as a list/tuple (per-level) with the same length as channel_mult")
-            self.num_res_blocks = num_res_blocks
-        if disable_self_attentions is not None: # False
-            # should be a list of booleans, indicating whether to disable self-attention in TransformerBlocks or not
-            assert len(disable_self_attentions) == len(channel_mult)
-        if num_attention_blocks is not None: # False
-            assert len(num_attention_blocks) == len(self.num_res_blocks)
-            assert all(map(lambda i: self.num_res_blocks[i] >= num_attention_blocks[i], range(len(num_attention_blocks))))
-            print(f"Constructor of UNetModel received num_attention_blocks={num_attention_blocks}. "
-                  f"This option has LESS priority than attention_resolutions {attention_resolutions}, "
-                  f"i.e., in cases where num_attention_blocks[i] > 0 but 2**i not in attention_resolutions, "
-                  f"attention will still not be set.")
+        self.num_res_blocks = len(channel_mult) * [num_res_blocks] # [2, 2, 2, 2]
 
         self.attention_resolutions = attention_resolutions
         self.dropout = dropout
@@ -140,9 +118,7 @@ class ControlNet(nn.Module):
 
         self.input_blocks = nn.ModuleList(
             [
-                TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
-                )
+                TimestepEmbedSequentialForNormal(conv_nd(dims, in_channels, model_channels, 3, padding=1))
             ]
         )
 
@@ -171,53 +147,31 @@ class ControlNet(nn.Module):
         ch = model_channels
         ds = 1
         for level, mult in enumerate(channel_mult): # channel_mult -- [1, 2, 4, 4]
-            for nr in range(self.num_res_blocks[level]):
+            for nr in range(self.num_res_blocks[level]): # self.num_res_blocks -- [2, 2, 2, 2]
                 layers = [
-                    ResBlock(
-                        ch,
+                    ResBlock(ch,
                         time_embed_dim,
                         dropout,
                         out_channels=mult * model_channels,
                         dims=dims,
-                        use_checkpoint=use_checkpoint,
-                        use_scale_shift_norm=use_scale_shift_norm,
+                        use_scale_shift_norm=False,
                     )
                 ]
                 ch = mult * model_channels
-                if ds in attention_resolutions:
+                if ds in attention_resolutions: # [4, 2, 1]
                     if num_head_channels == -1:
                         dim_head = ch // num_heads
                     else:
                         num_heads = ch // num_head_channels
                         dim_head = num_head_channels
-                    if legacy:
-                        # num_heads = 1
-                        dim_head = ch // num_heads if use_spatial_transformer else num_head_channels
-                    if exists(disable_self_attentions):
-                        disabled_sa = disable_self_attentions[level]
-                    else:
-                        disabled_sa = False
 
-                    if not exists(num_attention_blocks) or nr < num_attention_blocks[level]:
-                        layers.append(
-                            AttentionBlock(
-                                ch,
-                                use_checkpoint=use_checkpoint,
-                                num_heads=num_heads,
-                                num_head_channels=dim_head,
-                                use_new_attention_order=use_new_attention_order,
-                            ) if not use_spatial_transformer else SpatialTransformer(
-                                ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
-                                disable_self_attn=disabled_sa, use_linear=use_linear_in_transformer,
-                                use_checkpoint=use_checkpoint
-                            )
+                    layers.append(
+                        SpatialTransformer(
+                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
+                            use_linear=use_linear_in_transformer,
                         )
-                # xxxx8888
+                    )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
-                # new_layers = []
-                # for lx in layers:
-                #     new_layers.append(CreateTimestepEmbedSequential(lx))
-                # self.input_blocks.append(nn.Sequential(*new_layers))
 
                 self.zero_convs.append(self.make_zero_conv(ch))
                 self._feature_size += ch
@@ -225,35 +179,8 @@ class ControlNet(nn.Module):
             if level != len(channel_mult) - 1:
                 out_ch = ch
                 self.input_blocks.append(
-                    TimestepEmbedSequential(
-                        ResBlock(
-                            ch,
-                            time_embed_dim,
-                            dropout,
-                            out_channels=out_ch,
-                            dims=dims,
-                            use_checkpoint=use_checkpoint,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                            down=True,
-                        )
-                        if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch
-                        )
-                    )
+                    TimestepEmbedSequentialForNormal(Downsample(ch, conv_resample, dims=dims, out_channels=out_ch))
                 )
-                # if resblock_updown:
-                #     lx = ResBlock(ch,
-                #         time_embed_dim,
-                #         dropout,
-                #         out_channels=out_ch,
-                #         dims=dims,
-                #         use_checkpoint=use_checkpoint,
-                #         use_scale_shift_norm=use_scale_shift_norm,
-                #         down=True)
-                # else:
-                #     lx = Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
-                # self.input_blocks.append(CreateTimestepEmbedSequential(lx))
 
                 ch = out_ch
                 input_block_chans.append(ch)
@@ -266,71 +193,25 @@ class ControlNet(nn.Module):
         else:
             num_heads = ch // num_head_channels
             dim_head = num_head_channels
-        if legacy: # False
-            # num_heads = 1
-            dim_head = ch // num_heads if use_spatial_transformer else num_head_channels
+
         self.middle_block = TimestepEmbedSequential(
-            ResBlock(
-                ch,
+            ResBlock(ch,
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_checkpoint=use_checkpoint,
-                use_scale_shift_norm=use_scale_shift_norm,
+                use_scale_shift_norm=False,
             ),
-            AttentionBlock(
-                ch,
-                use_checkpoint=use_checkpoint,
-                num_heads=num_heads,
-                num_head_channels=dim_head,
-                use_new_attention_order=use_new_attention_order,
-            ) if not use_spatial_transformer else SpatialTransformer(  # always uses a self-attn
+            SpatialTransformer(  # always uses a self-attn
                 ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
-                disable_self_attn=disable_middle_self_attn, use_linear=use_linear_in_transformer,
-                use_checkpoint=use_checkpoint
+                use_linear=use_linear_in_transformer,
             ),
-            ResBlock(
-                ch,
+            ResBlock(ch,
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_checkpoint=use_checkpoint,
-                use_scale_shift_norm=use_scale_shift_norm,
+                use_scale_shift_norm=False,
             ),
         )
-        # layers = [
-        #     ResBlock(
-        #         ch,
-        #         time_embed_dim,
-        #         dropout,
-        #         dims=dims,
-        #         use_checkpoint=use_checkpoint,
-        #         use_scale_shift_norm=use_scale_shift_norm,
-        #     ),
-        #     AttentionBlock(
-        #         ch,
-        #         use_checkpoint=use_checkpoint,
-        #         num_heads=num_heads,
-        #         num_head_channels=dim_head,
-        #         use_new_attention_order=use_new_attention_order,
-        #     ) if not use_spatial_transformer else SpatialTransformer(  # always uses a self-attn
-        #         ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
-        #         disable_self_attn=disable_middle_self_attn, use_linear=use_linear_in_transformer,
-        #         use_checkpoint=use_checkpoint
-        #     ),
-        #     ResBlock(
-        #         ch,
-        #         time_embed_dim,
-        #         dropout,
-        #         dims=dims,
-        #         use_checkpoint=use_checkpoint,
-        #         use_scale_shift_norm=use_scale_shift_norm,
-        #     ),
-        # ]
-        # self.middle_block = nn.ModuleList()
-        # for lx in layers:
-        #     self.middle_block.append(CreateTimestepEmbedSequential(lx))
-
 
         self.middle_block_out = self.make_zero_conv(ch)
         self._feature_size += ch # ==> 10880

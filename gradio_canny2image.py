@@ -2,12 +2,13 @@ from share import *
 import config
 
 import cv2
-import einops
 import gradio as gr
 import numpy as np
 import torch
 import random
 
+import einops
+from einops.layers.torch import Rearrange
 from pytorch_lightning import seed_everything
 from annotator.util import resize_image, HWC3
 from annotator.canny import CannyDetector
@@ -26,6 +27,8 @@ model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', locatio
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
 
+pdb.set_trace()
+
 # model -- ControlLDM(...),
 # model.model -- DiffusionWrapper(...)
 # model.first_stage_model -- AutoencoderKL(...)
@@ -33,9 +36,10 @@ ddim_sampler = DDIMSampler(model)
 # model.control_model -- ControlNet(...)
 
 # model.model.to_torchscript()
+# torch.jit.script(model.model)
 # torch.jit.script(model.first_stage_model)
 # torch.jit.script(model.cond_stage_model)
-# torch.jit.script(model.control_model) -- Unknown type name 'TimestepBlock'
+# torch.jit.script(model.control_model)
 
 # ddim_sampler -- <cldm.ddim_hacked.DDIMSampler object>
 

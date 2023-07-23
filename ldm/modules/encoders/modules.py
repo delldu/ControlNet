@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
 from transformers import CLIPTokenizer, CLIPTextModel
 
 import open_clip
@@ -148,10 +147,8 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         for i, r in enumerate(self.model.transformer.resblocks):
             if i == len(self.model.transformer.resblocks) - self.layer_idx:
                 break
-            if self.model.transformer.grad_checkpointing and not torch.jit.is_scripting(): # False
-                x = checkpoint(r, x, attn_mask)
-            else:
-                x = r(x, attn_mask=attn_mask)
+            x = r(x, attn_mask=attn_mask)
+
         return x
 
     # xxxx1111
