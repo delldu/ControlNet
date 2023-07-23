@@ -152,12 +152,7 @@ class ResBlock(nn.Module): #  TimestepBlock
     :param emb_channels: the number of timestep embedding channels.
     :param dropout: the rate of dropout.
     :param out_channels: if specified, the number of out channels.
-    :param use_conv: if True and out_channels is specified, use a spatial
-        convolution instead of a smaller 1x1 convolution to change the
-        channels in the skip connection.
     :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param up: if True, use this block for upsampling.
-    :param down: if True, use this block for downsampling.
     """
 
     def __init__(
@@ -166,11 +161,7 @@ class ResBlock(nn.Module): #  TimestepBlock
         emb_channels,
         dropout,
         out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
         dims=2,
-        up=False,
-        down=False,
     ):
         super().__init__()
         # channels = 320
@@ -181,8 +172,6 @@ class ResBlock(nn.Module): #  TimestepBlock
         self.emb_channels = emb_channels
         self.dropout = dropout
         self.out_channels = out_channels or channels
-        self.use_conv = use_conv
-        self.use_scale_shift_norm = use_scale_shift_norm
 
         self.in_layers = nn.Sequential(
             normalization(channels),
@@ -190,22 +179,11 @@ class ResBlock(nn.Module): #  TimestepBlock
             conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
 
-        self.updown = up or down
-
-        if up:
-            self.h_upd = Upsample(channels, False, dims)
-            self.x_upd = Upsample(channels, False, dims)
-        elif down:
-            self.h_upd = Downsample(channels, False, dims)
-            self.x_upd = Downsample(channels, False, dims)
-        else:
-            self.h_upd = self.x_upd = nn.Identity()
-
         self.emb_layers = nn.Sequential(
             nn.SiLU(),
             linear(
                 emb_channels,
-                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
+                self.out_channels,
             ),
         )
         self.out_layers = nn.Sequential(
@@ -219,35 +197,17 @@ class ResBlock(nn.Module): #  TimestepBlock
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
-        elif use_conv: # False
-            self.skip_connection = conv_nd(
-                dims, channels, self.out_channels, 3, padding=1
-            )
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
-        print("---- ResBlock: self.updown ---- ", self.updown)
-
     def forward(self, x, emb):
-        if self.updown:
-            in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
-            h = in_rest(x) # xxxx8888
-            h = self.h_upd(h)
-            x = self.x_upd(x)
-            h = in_conv(h)
-        else:
-            h = self.in_layers(x)
+        h = self.in_layers(x)
         emb_out = self.emb_layers(emb).type(h.dtype)
         while len(emb_out.shape) < len(h.shape):
             emb_out = emb_out[..., None]
-        if self.use_scale_shift_norm:
-            out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
-            scale, shift = torch.chunk(emb_out, 2, dim=1)
-            h = out_norm(h) * (1 + scale) + shift
-            h = out_rest(h)
-        else:
-            h = h + emb_out
-            h = self.out_layers(h)
+
+        h = h + emb_out
+        h = self.out_layers(h)
         return self.skip_connection(x) + h
 
 
@@ -488,7 +448,6 @@ class UNetModel(nn.Module):
                         dropout,
                         out_channels=mult * model_channels,
                         dims=dims,
-                        use_scale_shift_norm=False,
                     )
                 ]
                 ch = mult * model_channels
@@ -530,7 +489,6 @@ class UNetModel(nn.Module):
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=False,
             ),
             SpatialTransformer(  # always uses a self-attn
                 ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
@@ -540,7 +498,6 @@ class UNetModel(nn.Module):
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=False,
             ),
         )
         self._feature_size += ch
@@ -555,7 +512,6 @@ class UNetModel(nn.Module):
                         dropout,
                         out_channels=model_channels * mult,
                         dims=dims,
-                        use_scale_shift_norm=False,
                     )
                 ]
                 ch = model_channels * mult

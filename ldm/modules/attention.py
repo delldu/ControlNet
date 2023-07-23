@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn.functional as F
 from torch import nn, einsum
-from einops import rearrange, repeat
+# from einops import rearrange
 from einops.layers.torch import Rearrange
 from typing import Optional, Any
 
@@ -233,7 +233,9 @@ class SpatialTransformer(nn.Module):
         else:
             self.proj_out = zero_module(nn.Linear(in_channels, inner_dim))
         self.use_linear = use_linear
-
+        self.BxCxHxW_BxHWxC = Rearrange('b c h w -> b (h w) c')
+        self.BxHxWxC_BxCxHxW = Rearrange('b h w c -> b c h w')
+        
     def forward(self, x, context=None):
         # note: if no context is given, cross-attention defaults to self-attention
         if not isinstance(context, list):
@@ -243,14 +245,16 @@ class SpatialTransformer(nn.Module):
         x = self.norm(x)
         if not self.use_linear:
             x = self.proj_in(x)
-        x = rearrange(x, 'b c h w -> b (h w) c').contiguous()
+        # x = rearrange(x, 'b c h w -> b (h w) c').contiguous()
+        x = self.BxCxHxW_BxHWxC(x).contiguous()
         if self.use_linear:
             x = self.proj_in(x)
         for i, block in enumerate(self.transformer_blocks):
             x = block(x, context=context[i])
         if self.use_linear:
             x = self.proj_out(x)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w).contiguous()
+        # x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w).contiguous()
+        x = self.BxHxWxC_BxCxHxW(x.reshape(b, h, w, c)).contiguous()
         if not self.use_linear:
             x = self.proj_out(x)
         return x + x_in

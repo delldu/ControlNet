@@ -35,5 +35,13 @@ def get_obj_from_str(string, reload=False):
     if reload:
         module_imp = importlib.import_module(module)
         importlib.reload(module_imp)
+
+    # 'cldm.cldm.ControlLDM'
+    # 'cldm.cldm.ControlledUnetModel'
+    # 'ldm.models.autoencoder.AutoencoderKL'
+    # 'torch.nn.Identity'
+    # 'ldm.modules.encoders.modules.FrozenCLIPEmbedder'
+    # 'cldm.cldm.ControlNet'
+
     return getattr(importlib.import_module(module, package=None), cls)
 

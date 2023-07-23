@@ -154,7 +154,6 @@ class ControlNet(nn.Module):
                         dropout,
                         out_channels=mult * model_channels,
                         dims=dims,
-                        use_scale_shift_norm=False,
                     )
                 ]
                 ch = mult * model_channels
@@ -199,7 +198,6 @@ class ControlNet(nn.Module):
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=False,
             ),
             SpatialTransformer(  # always uses a self-attn
                 ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim,
@@ -209,7 +207,6 @@ class ControlNet(nn.Module):
                 time_embed_dim,
                 dropout,
                 dims=dims,
-                use_scale_shift_norm=False,
             ),
         )
 
@@ -256,6 +253,7 @@ class ControlNet(nn.Module):
 class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
     def __init__(self, control_stage_config, control_key, only_mid_control, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # control_stage_config.get('params').get('image_size')
         self.control_model = instantiate_from_config(control_stage_config)
         self.control_key = control_key
         self.only_mid_control = only_mid_control

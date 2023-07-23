@@ -11,16 +11,16 @@ import torch.nn as nn
 import numpy as np
 import pytorch_lightning as pl
 # from einops import rearrange
-from einops.layers.torch import Rearrange
+# from einops.layers.torch import Rearrange
 from functools import partial
 from ldm.util import exists, default, count_params, instantiate_from_config
 from ldm.modules.diffusionmodules.util import make_beta_schedule
 
 import pdb
 
-__conditioning_keys__ = {'concat': 'c_concat',
-                         'crossattn': 'c_crossattn',
-                         'adm': 'y'}
+# __conditioning_keys__ = {'concat': 'c_concat',
+#                          'crossattn': 'c_crossattn',
+#                          'adm': 'y'}
 
 
 class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
@@ -37,15 +37,14 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
                  log_every_t=100,
                  linear_start=1e-4,
                  linear_end=2e-2,
-                 cosine_s=8e-3,
-                 conditioning_key=None,
+                 conditioning_key='crossattn',
                  parameterization="eps",  # all assuming fixed variance schedules
                  ):
         super().__init__()
 
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
-        print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
+        # print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
         self.cond_stage_model = None
         self.log_every_t = log_every_t
         self.first_stage_key = first_stage_key
@@ -58,16 +57,15 @@ class DDPM(pl.LightningModule): # torch.nn.Module, pl.LightningModule
             self.monitor = monitor # 'val/loss_simple_ema'
 
         self.register_schedule(beta_schedule="linear", timesteps=timesteps,
-                               linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s)
+                               linear_start=linear_start, linear_end=linear_end)
 
         logvar = torch.full(fill_value=0.0, size=(self.num_timesteps,))
         self.register_buffer('logvar', logvar)
 
 
     def register_schedule(self, beta_schedule="linear", timesteps=1000,
-                          linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
-        betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end,
-                                       cosine_s=cosine_s)
+                          linear_start=1e-4, linear_end=2e-2):
+        betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end)
         alphas = 1. - betas
         alphas_cumprod = np.cumprod(alphas, axis=0)
         alphas_cumprod_prev = np.append(1., alphas_cumprod[:-1])
@@ -93,9 +91,9 @@ class LatentDiffusion(DDPM):
                  num_timesteps_cond=None,
                  cond_stage_key="image",
                  cond_stage_trainable=False,
-                 concat_mode=True,
-                 cond_stage_forward=None,
-                 conditioning_key=None,
+                 # concat_mode=True,
+                 # cond_stage_forward=None,
+                 conditioning_key='crossattn',
                  scale_factor=1.0,
                  scale_by_std=False,
                  *args, **kwargs):
@@ -108,12 +106,12 @@ class LatentDiffusion(DDPM):
         #     'first_stage_key': 'jpg', 'image_size': 64, 'channels': 4, 'monitor': 'val/loss_simple_ema', 
         #     'use_ema': False, 'unet_config': {'target': 'cldm.cldm.ControlledUnetModel', 'params': {'use_checkpoint': True, 'image_size': 32, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_head_channels': 64, 'use_spatial_transformer': True, 'use_linear_in_transformer': True, 'transformer_depth': 1, 'context_dim': 1024, 'legacy': False}}}
 
-        self.num_timesteps_cond = default(num_timesteps_cond, 1)
+        # self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
-        assert self.num_timesteps_cond <= kwargs['timesteps']
+        # assert self.num_timesteps_cond <= kwargs['timesteps']
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
 
-        self.concat_mode = concat_mode
+        # self.concat_mode = concat_mode
         self.cond_stage_trainable = cond_stage_trainable
         self.cond_stage_key = cond_stage_key
         try:
@@ -126,9 +124,8 @@ class LatentDiffusion(DDPM):
             self.register_buffer('scale_factor', torch.tensor(scale_factor))
         self.instantiate_first_stage(first_stage_config)
         self.instantiate_cond_stage(cond_stage_config)
-        self.cond_stage_forward = cond_stage_forward
+        # self.cond_stage_forward = cond_stage_forward
 
-        self.BXHXWXC_BXCXHXW = Rearrange('b h w c -> b c h w')
 
 
     def instantiate_first_stage(self, config):
@@ -138,25 +135,11 @@ class LatentDiffusion(DDPM):
             param.requires_grad = False
 
     def instantiate_cond_stage(self, config):
-        if not self.cond_stage_trainable: # True
-            if config == "__is_first_stage__":
-                print("Using first stage also as cond stage.")
-                self.cond_stage_model = self.first_stage_model
-            elif config == "__is_unconditional__":
-                print(f"Training {self.__class__.__name__} as an unconditional model.")
-                self.cond_stage_model = None
-                # self.be_unconditional = True
-            else: # True
-                model = instantiate_from_config(config)
-                self.cond_stage_model = model.eval()
-                # self.cond_stage_model.train = disabled_train
-                for param in self.cond_stage_model.parameters():
-                    param.requires_grad = False
-        else:
-            assert config != '__is_first_stage__'
-            assert config != '__is_unconditional__'
-            model = instantiate_from_config(config)
-            self.cond_stage_model = model
+        model = instantiate_from_config(config)
+        self.cond_stage_model = model.eval()
+        # self.cond_stage_model.train = disabled_train
+        for param in self.cond_stage_model.parameters():
+            param.requires_grad = False
 
     # xxxx1111
     def get_learned_conditioning(self, c):
@@ -165,16 +148,7 @@ class LatentDiffusion(DDPM):
 
     # xxxx1111
     @torch.no_grad()
-    def decode_first_stage(self, z, predict_cids=False, force_not_quantize=False):
-        # predict_cids = False
-        # force_not_quantize = False
-        if predict_cids:
-            if z.dim() == 4:
-                z = torch.argmax(z.exp(), dim=1).long()
-            z = self.first_stage_model.quantize.get_codebook_entry(z, shape=None)
-            # z = rearrange(z, 'b h w c -> b c h w').contiguous()
-            z = self.BXHXWXC_BXCXHXW(z).contiguous()
-
+    def decode_first_stage(self, z):
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)
 
