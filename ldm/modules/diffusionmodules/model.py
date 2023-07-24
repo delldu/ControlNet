@@ -10,14 +10,13 @@ from typing import Optional, Any
 from ldm.modules.attention import MemoryEfficientCrossAttention
 import pdb
 
-XFORMERS_IS_AVAILBLE = False
-# try:
-#     import xformers
-#     import xformers.ops
-#     XFORMERS_IS_AVAILBLE = True
-# except:
-#     XFORMERS_IS_AVAILBLE = False
-#     print("No module 'xformers'. Proceeding without it.")
+try:
+    import xformers
+    import xformers.ops
+    XFORMERS_IS_AVAILBLE = True
+except:
+    XFORMERS_IS_AVAILBLE = False
+    print("No module 'xformers'. Proceeding without it.")
 
 def nonlinearity(x):
     # swish
