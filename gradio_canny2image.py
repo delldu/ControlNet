@@ -19,14 +19,35 @@ import pdb
 
 apply_canny = CannyDetector()
 model = create_model('./models/cldm_v15.yaml').cpu()
+# model.model.to_torchscript()
+
+# torch.jit.script(model.model.diffusion_model.time_embed)
+# pdb.set_trace()
+# torch.jit.script(model.model.diffusion_model.input_blocks)
+# pdb.set_trace()
+# torch.jit.script(model.model.diffusion_model.middle_block)
+# pdb.set_trace()
+# torch.jit.script(model.model.diffusion_model.output_blocks)
+# pdb.set_trace()
+# torch.jit.script(model.model.diffusion_model.out)
+# pdb.set_trace()
+# torch.jit.script(model.first_stage_model)
+# pdb.set_trace()
+# torch.jit.script(model.cond_stage_model)
+# pdb.set_trace()
+# torch.jit.script(model.control_model)
+# pdb.set_trace()
+
 model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', location='cpu'), strict=False)
 
 # model = create_model('./models/cldm_v21.yaml').cpu()
 # model.load_state_dict(load_state_dict('./models/control_v11p_sd21.pth', location='cpu'), strict=False)
 # model.control_model.load_state_dict(load_state_dict('./models/control_v11p_sd21_canny.safetensors', location='cpu'))
 model = model.cuda()
+
+
+
 ddim_sampler = DDIMSampler(model)
-pdb.set_trace()
 
 # model -- ControlLDM(...),
 # model.model -- DiffusionWrapper(...)
@@ -34,11 +55,6 @@ pdb.set_trace()
 # model.cond_stage_model -- FrozenCLIPEmbedder(...)
 # model.control_model -- ControlNet(...)
 
-# model.model.to_torchscript()
-# torch.jit.script(model.model)
-# torch.jit.script(model.first_stage_model)
-# torch.jit.script(model.cond_stage_model)
-# torch.jit.script(model.control_model)
 
 # ddim_sampler -- <cldm.ddim_hacked.DDIMSampler object>
 

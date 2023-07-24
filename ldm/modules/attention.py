@@ -1,9 +1,8 @@
 from inspect import isfunction
 import math
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn, einsum
-# from einops import rearrange
 from einops.layers.torch import Rearrange
 from typing import Optional, Any
 import pdb
@@ -26,10 +25,6 @@ def default(val, d):
     if exists(val):
         return val
     return d() if isfunction(d) else d
-
-
-def max_neg_value(t):
-    return -torch.finfo(t.dtype).max
 
 
 # feedforward
@@ -73,7 +68,7 @@ def zero_module(module):
 
 
 def Normalize(in_channels):
-    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+    return nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
 
 
 class CrossAttention(nn.Module):
@@ -93,32 +88,34 @@ class CrossAttention(nn.Module):
             nn.Linear(inner_dim, query_dim),
             nn.Dropout(dropout)
         )
+        self.BxHxNxD_BxNxHD = Rearrange('b h n d -> b n (h d)')
+        self.BxNxHxD_BHxNxD = Rearrange('b n h d -> (b h) n d')
 
-    def forward(self, x, context=None):
+    def forward(self, x, context: Optional[torch.Tensor]=None):
         h = self.heads
 
         q = self.to_q(x)
-        context = default(context, x)
+        # context = default(context, x)
+        if context is None:
+            context = x
+
         k = self.to_k(context)
         v = self.to_v(context)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
-
-        # force cast to fp32 to avoid overflowing
-        if _ATTN_PRECISION =="fp32":
-            with torch.autocast(enabled=False, device_type = 'cuda'):
-                q, k = q.float(), k.float()
-                sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
-        else:
-            sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
-        
+        # q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
+        q = self.BxNxHxD_BHxNxD(q.reshape(q.shape[0], q.shape[1], h, q.shpe[2] // h))
+        k = self.BxNxHxD_BHxNxD(k.reshape(k.shape[0], k.shape[1], h, k.shpe[2] // h))
+        v = self.BxNxHxD_BHxNxD(v.reshape(v.shape[0], v.shape[1], h, v.shpe[2] // h))
+        sim = torch.einsum('b i d, b j d -> b i j', q, k) * self.scale
         del q, k
     
         # attention, what we cannot get enough of
         sim = sim.softmax(dim=-1)
 
-        out = einsum('b i j, b j d -> b i d', sim, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        out = torch.einsum('b i j, b j d -> b i d', sim, v)
+        # out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        out = self.BxHxNxD_BxNxHD(out.reshape(out.shape[0]//h, h, n, d))
+
         return self.to_out(out)
 
 
@@ -141,9 +138,11 @@ class MemoryEfficientCrossAttention(nn.Module):
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
         self.attention_op: Optional[Any] = None
 
-    def forward(self, x, context=None):
+    def forward(self, x, context: Optional[torch.Tensor]=None):
         q = self.to_q(x)
-        context = default(context, x)
+        # context = default(context, x)
+        if context is None:
+            context = x
         k = self.to_k(context)
         v = self.to_v(context)
 
@@ -157,11 +156,11 @@ class MemoryEfficientCrossAttention(nn.Module):
         #     .contiguous(),
         #     (q, k, v),
         # )
-        q = q.unsqueeze(3).reshape(B, q.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+        q = q.unsqueeze(3).reshape(B, q.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3) \
             .reshape(B * self.heads, q.shape[1], self.dim_head).contiguous()
-        k = k.unsqueeze(3).reshape(B, k.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+        k = k.unsqueeze(3).reshape(B, k.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3) \
             .reshape(B * self.heads, k.shape[1], self.dim_head).contiguous()
-        v = v.unsqueeze(3).reshape(B, v.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3)\
+        v = v.unsqueeze(3).reshape(B, v.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3) \
             .reshape(B * self.heads, v.shape[1], self.dim_head).contiguous()
 
         # actually compute the attention, what we cannot get enough of
@@ -195,7 +194,7 @@ class BasicTransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(dim)
         self.norm3 = nn.LayerNorm(dim)
 
-    def forward(self, x, context=None):
+    def forward(self, x, context: Optional[torch.Tensor]=None):
         x = self.attn1(self.norm1(x), context=None) + x
         x = self.attn2(self.norm2(x), context=context) + x
         x = self.ff(self.norm3(x)) + x
@@ -240,14 +239,12 @@ class SpatialTransformer(nn.Module):
                                                   padding=0))
         else:
             self.proj_out = zero_module(nn.Linear(in_channels, inner_dim))
-        self.use_linear = use_linear
+        self.use_linear = use_linear # True for v2.1, False for v1.5 !!!
+
         self.BxCxHxW_BxHWxC = Rearrange('b c h w -> b (h w) c')
         self.BxHxWxC_BxCxHxW = Rearrange('b h w c -> b c h w')
-        
-    def forward(self, x, context=None):
-        # note: if no context is given, cross-attention defaults to self-attention
-        if not isinstance(context, list):
-            context = [context]
+
+    def forward(self, x, context: Optional[torch.Tensor]=None):
         b, c, h, w = x.shape
         x_in = x
         x = self.norm(x)
@@ -257,8 +254,8 @@ class SpatialTransformer(nn.Module):
         x = self.BxCxHxW_BxHWxC(x).contiguous()
         if self.use_linear:
             x = self.proj_in(x)
-        for i, block in enumerate(self.transformer_blocks):
-            x = block(x, context=context[i])
+        for i, block in enumerate(self.transformer_blocks): # len(self.transformer_blocks) -- 1
+            x = block(x, context=context)
         if self.use_linear:
             x = self.proj_out(x)
         # x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w).contiguous()
