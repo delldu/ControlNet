@@ -1,11 +1,15 @@
 import torch
 import torch.nn as nn
+from pytorch_lightning import seed_everything
+import numpy as np
 
 from ldm.modules.diffusionmodules.util import (
     conv_nd,
     linear,
     zero_module,
     timestep_embedding,
+    make_ddim_timesteps,
+    make_ddim_sampling_parameters,
 )
 
 from ldm.modules.attention import SpatialTransformer
@@ -14,7 +18,11 @@ from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     ResBlock, Downsample
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import exists, instantiate_from_config
+
+from tqdm import tqdm
+
 from typing import Optional
+
 
 import pdb
 
@@ -289,3 +297,163 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
             self.control_model = self.control_model.cpu()
             self.first_stage_model = self.first_stage_model.cuda()
             self.cond_stage_model = self.cond_stage_model.cuda()
+
+
+    def forward(self, input_image, a_prompt, n_prompt, ddim_steps, strength, scale, seed, eta):
+        B, C, H, W = input_image.size()
+        shape = (4, H // 8, W // 8)
+        seed_everything(seed)
+
+        self.low_vram_shift(is_diffusing=False)
+
+        cond = {"c_concat": [input_image], "c_crossattn": [self.get_learned_conditioning([a_prompt] * B)]}
+        un_cond = {"c_concat": [input_image], "c_crossattn": [self.get_learned_conditioning([n_prompt] * B)]}
+
+        self.low_vram_shift(is_diffusing=True)
+
+        self.control_scales = ([strength] * 13)  # Magic number. 
+
+        samples = self.sample(ddim_steps, B,
+                             shape, cond, verbose=False, eta=eta,
+                             unconditional_guidance_scale=scale,
+                             unconditional_conditioning=un_cond)
+        # samples.size() -- [1, 4, 80, 64]
+        self.low_vram_shift(is_diffusing=False)
+
+        results = self.decode_first_stage(samples)
+
+        return results
+
+
+    def sample(self,
+               S,
+               batch_size,
+               shape,
+               conditioning=None,
+               eta=0.,
+               verbose=True,
+               unconditional_guidance_scale=1.,
+               unconditional_conditioning=None,
+               ):
+
+        # S = 20
+        # batch_size = 4
+        # shape = (4, 80, 64)
+        # verbose = False
+        # unconditional_guidance_scale = 9
+
+        self.make_schedule(ddim_num_steps=S, ddim_eta=eta, verbose=verbose)
+
+        # sampling
+        C, H, W = shape
+        size = (batch_size, C, H, W)
+        print(f'Data shape for DDIM sampling is {size}, eta is {eta}') # (1, 4, 96, 64)
+
+        samples = self.ddim_sampling(conditioning, size,
+                                    unconditional_guidance_scale=unconditional_guidance_scale, # 9
+                                    unconditional_conditioning=unconditional_conditioning,
+                                )
+
+        # samples.size() -- [1, 4, 80, 64]
+        return samples
+
+    def ddim_sampling(self, cond, shape,
+                      unconditional_guidance_scale=1.,
+                      unconditional_conditioning=None, 
+                      ):
+
+        device = self.betas.device
+        b = shape[0] # shape -- (4, 4, 80, 64), 4 samples
+        img = torch.randn(shape, device=device)
+
+        time_range = np.flip(self.ddim_timesteps)
+        total_steps = self.ddim_timesteps.shape[0] # 20
+
+        print(f"Running DDIM Sampling with {total_steps} timesteps")
+        iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps)
+
+        for i, step in enumerate(iterator):
+            index = total_steps - i - 1
+            ts = torch.full((b,), step, device=device, dtype=torch.long)
+
+            outs = self.p_sample_ddim(img, cond, ts, index=index,
+                                      unconditional_guidance_scale=unconditional_guidance_scale,
+                                      unconditional_conditioning=unconditional_conditioning,
+                                      )
+            img, pred_x0 = outs
+
+
+        return img
+
+    def p_sample_ddim(self, x, c, t, index, 
+                      unconditional_guidance_scale=1.,
+                      unconditional_conditioning=None,
+                      ):
+        b = x.shape[0]
+        device = self.betas.device
+
+        # x.size() -- [4, 4, 80, 64]
+        # t -- tensor([951, 951, 951, 951], device='cuda:0'), index = 19 ...
+
+        # xxxx1111 !!!
+        model_t = self.apply_model(x, t, c)
+        model_uncond = self.apply_model(x, t, unconditional_conditioning)
+        e_t = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
+
+        # Select parameters corresponding to the currently considered timestep
+        a_t = torch.full((b, 1, 1, 1), self.ddim_alphas[index], device=device)
+        a_prev = torch.full((b, 1, 1, 1), self.ddim_alphas_prev[index], device=device)
+        sigma_t = torch.full((b, 1, 1, 1), self.ddim_sigmas[index], device=device)
+        sqrt_one_minus_at = torch.full((b, 1, 1, 1), self.ddim_sqrt_one_minus_alphas[index], device=device)
+
+        # Current prediction for x_0
+        pred_x0 = (x - sqrt_one_minus_at * e_t) / a_t.sqrt()
+
+        # Direction pointing to x_t
+        dir_xt = (1. - a_prev - sigma_t**2).sqrt() * e_t
+        noise = sigma_t * torch.randn(x.shape, device=device) # * temperature, temperature == 1.0
+        x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
+
+        return x_prev, pred_x0
+
+
+    def make_schedule(self, ddim_num_steps, ddim_eta=0., verbose=True):
+        self.ddim_timesteps = make_ddim_timesteps(num_ddim_timesteps=ddim_num_steps,
+                                                  num_ddpm_timesteps=self.num_timesteps,verbose=verbose)
+        # len(self.ddim_timesteps) -- 20
+        # self.ddim_timesteps -- array([  1,  51, 101, 151, 201, 251, 301, 351, 401, 451, 501, 551, 601,
+        # 651, 701, 751, 801, 851, 901, 951])
+
+        assert self.alphas_cumprod.shape[0] == self.num_timesteps, 'alphas have to be defined for each timestep'
+
+        # ddim sampling parameters
+        ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(
+            alphacums=self.alphas_cumprod.cpu(),
+            ddim_timesteps=self.ddim_timesteps,
+            eta=ddim_eta,
+            verbose=verbose)
+
+        # len(ddim_sigmas) -- 20, ddim_sigmas = [0.0, ..., 0.0]
+
+        # (Pdb) len(ddim_alphas) -- 20
+        # (Pdb) ddim_alphas
+        # tensor([0.9983, 0.9505, 0.8930, 0.8264, 0.7521, 0.6722, 0.5888, 0.5048, 0.4229,
+        #         0.3456, 0.2750, 0.2128, 0.1598, 0.1163, 0.0819, 0.0557, 0.0365, 0.0231,
+        #         0.0140, 0.0082])
+
+        # (Pdb) len(ddim_alphas_prev) -- 20
+        # (Pdb) ddim_alphas_prev
+        # array([0.99914998, 0.99829602, 0.95052433, 0.89298052, 0.82639927,
+        #        0.75214338, 0.67215145, 0.58881873, 0.50481856, 0.42288151,
+        #        0.34555823, 0.27499905, 0.21278252, 0.15981644, 0.11632485,
+        #        0.08191671, 0.05571903, 0.03654652, 0.02307699, 0.0140049 ])
+
+        # self.register_buffer('ddim_sigmas', ddim_sigmas)
+        # self.register_buffer('ddim_alphas', ddim_alphas)
+        # self.register_buffer('ddim_alphas_prev', ddim_alphas_prev)
+        # self.register_buffer('ddim_sqrt_one_minus_alphas', np.sqrt(1. - ddim_alphas))
+
+        self.ddim_sigmas = ddim_sigmas
+        self.ddim_alphas = ddim_alphas
+        self.ddim_alphas_prev = ddim_alphas_prev
+        self.ddim_sqrt_one_minus_alphas = np.sqrt(1. - ddim_alphas)

@@ -45,10 +45,10 @@ model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', locatio
 # model.control_model.load_state_dict(load_state_dict('./models/control_v11p_sd21_canny.safetensors', location='cpu'))
 model = model.cuda()
 
-model = torch.compile(model)
+# model = torch.compile(model)
 
 
-ddim_sampler = DDIMSampler(model)
+# ddim_sampler = DDIMSampler(model)
 
 # model -- ControlLDM(...),
 # model.model -- DiffusionWrapper(...)
@@ -75,30 +75,36 @@ def process(input_image, prompt, a_prompt, n_prompt, num_samples, image_resoluti
 
         if seed == -1:
             seed = random.randint(0, 65535)
-        seed_everything(seed)
+        
+        # --------------------------------
+        # seed_everything(seed)
 
-        if config.save_memory:
-            model.low_vram_shift(is_diffusing=False)
+        # if config.save_memory:
+        #     model.low_vram_shift(is_diffusing=False)
 
-        cond = {"c_concat": [control], "c_crossattn": [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
-        un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [model.get_learned_conditioning([n_prompt] * num_samples)]}
-        shape = (4, H // 8, W // 8)
+        # cond = {"c_concat": [control], "c_crossattn": [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
+        # un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [model.get_learned_conditioning([n_prompt] * num_samples)]}
+        # shape = (4, H // 8, W // 8)
 
-        if config.save_memory:
-            model.low_vram_shift(is_diffusing=True)
+        # if config.save_memory:
+        #     model.low_vram_shift(is_diffusing=True)
 
-        model.control_scales = [strength * (0.825 ** float(12 - i)) for i in range(13)] if guess_mode else ([strength] * 13)  # Magic number. IDK why. Perhaps because 0.825**12<0.01 but 0.826**12>0.01
-        samples, intermediates = ddim_sampler.sample(ddim_steps, num_samples,
-                                                     shape, cond, verbose=False, eta=eta,
-                                                     unconditional_guidance_scale=scale,
-                                                     unconditional_conditioning=un_cond)
-        # samples.size() -- [1, 4, 80, 64]
-        # intermediates.keys() -- ['x_inter', 'pred_x0']
-        if config.save_memory:
-            model.low_vram_shift(is_diffusing=False)
+        # model.control_scales = [strength * (0.825 ** float(12 - i)) for i in range(13)] if guess_mode else ([strength] * 13)  # Magic number. IDK why. Perhaps because 0.825**12<0.01 but 0.826**12>0.01
+        # samples, intermediates = ddim_sampler.sample(ddim_steps, num_samples,
+        #                                              shape, cond, verbose=False, eta=eta,
+        #                                              unconditional_guidance_scale=scale,
+        #                                              unconditional_conditioning=un_cond)
+        # # samples.size() -- [1, 4, 80, 64]
+        # # intermediates.keys() -- ['x_inter', 'pred_x0']
+        # if config.save_memory:
+        #     model.low_vram_shift(is_diffusing=False)
 
-        # torch.jit.script(model.decode_first_stage) ==> ?
-        x_samples = model.decode_first_stage(samples)
+        # # torch.jit.script(model.decode_first_stage) ==> ?
+        # x_samples = model.decode_first_stage(samples)
+        # --------------------------------
+
+        x_samples = model.forward(control, prompt + ', ' + a_prompt, n_prompt, ddim_steps, strength, scale, seed, eta)
+
         x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c') * 127.5 + 127.5).cpu().numpy().clip(0, 255).astype(np.uint8)
 
         results = [x_samples[i] for i in range(num_samples)]
