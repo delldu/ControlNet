@@ -299,17 +299,19 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
             self.cond_stage_model = self.cond_stage_model.cuda()
 
 
-    def forward(self, input_image, a_prompt, n_prompt, ddim_steps, strength, scale, seed, eta):
+    def forward(self, input_image, a_prompt, n_prompt, ddim_steps, strength, scale, seed, eta, save_memory=True):
         B, C, H, W = input_image.size()
         shape = (4, H // 8, W // 8)
         seed_everything(seed)
 
-        self.low_vram_shift(is_diffusing=False)
+        if save_memory:
+            self.low_vram_shift(is_diffusing=False)
 
         cond = {"c_concat": [input_image], "c_crossattn": [self.get_learned_conditioning([a_prompt] * B)]}
         un_cond = {"c_concat": [input_image], "c_crossattn": [self.get_learned_conditioning([n_prompt] * B)]}
 
-        self.low_vram_shift(is_diffusing=True)
+        if save_memory:
+            self.low_vram_shift(is_diffusing=True)
 
         self.control_scales = ([strength] * 13)  # Magic number. 
 
@@ -318,7 +320,9 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
                              unconditional_guidance_scale=scale,
                              unconditional_conditioning=un_cond)
         # samples.size() -- [1, 4, 80, 64]
-        self.low_vram_shift(is_diffusing=False)
+
+        if save_memory:
+            self.low_vram_shift(is_diffusing=False)
 
         results = self.decode_first_stage(samples)
 
