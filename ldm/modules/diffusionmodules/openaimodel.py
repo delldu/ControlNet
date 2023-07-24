@@ -15,7 +15,8 @@ from ldm.modules.diffusionmodules.util import (
     timestep_embedding,
 )
 from ldm.modules.attention import SpatialTransformer
-from ldm.util import exists
+from typing import Optional
+
 import pdb
 
 # dummy replace
@@ -62,7 +63,7 @@ class TimestepEmbedSequential(nn.Sequential):
     A sequential module that passes timestep embeddings to the children that
     support it as an extra input.
     """
-    def forward(self, x, emb, context=None):
+    def forward(self, x, emb, context):
         # for layer in self:
         #     if isinstance(layer, TimestepBlock): # 'ldm.modules.diffusionmodules.openaimodel.ResBlock' -- TimestepBlock
         #         x = layer(x, emb)
@@ -85,7 +86,7 @@ class TimestepEmbedSequentialForNormal(nn.Sequential):
     support it as an extra input.
     """
 
-    def forward(self, x, emb, context=None):
+    def forward(self, x, emb: Optional[torch.Tensor]=None, context: Optional[torch.Tensor]=None):
         for layer in self:
             x = layer(x) # 'torch.nn.modules.conv.Conv2d' ...
         return x
@@ -108,7 +109,7 @@ class Upsample(nn.Module):
         if use_conv:
             self.conv = conv_nd(dims, self.channels, self.out_channels, 3, padding=padding)
 
-    def forward(self, x, emb=None): # add emb for TimestepEmbedSequential 
+    def forward(self, x, emb: Optional[torch.Tensor]=None): # add emb for TimestepEmbedSequential 
         assert x.shape[1] == self.channels
         if self.dims == 3:
             x = F.interpolate(x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest")
@@ -202,7 +203,7 @@ class ResBlock(nn.Module): #  TimestepBlock
 
     def forward(self, x, emb):
         h = self.in_layers(x)
-        emb_out = self.emb_layers(emb).type(h.dtype)
+        emb_out = self.emb_layers(emb) # .type(h.dtype)
         while len(emb_out.shape) < len(h.shape):
             emb_out = emb_out[..., None]
 
@@ -254,7 +255,7 @@ class QKVAttentionLegacy(nn.Module):
         weight = torch.einsum(
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
+        weight = torch.softmax(weight.float(), dim=-1) # .type(weight.dtype)
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, length)
 
@@ -334,13 +335,13 @@ class UNetModel(nn.Module):
         conv_resample=True,
         dims=2,
         use_checkpoint=True, # True for v1.5 and v2.1
-        use_fp16=False,
+        # use_fp16=False,
         num_heads=-1,
         num_head_channels=-1, # 64 for v2.1
         use_spatial_transformer=True,     # True all for v1.5 and v2.1 custom transformer support
         transformer_depth=1,              # custom transformer support
         context_dim=None,                 # custom transformer support
-        n_embed=None,                     # custom support for prediction of discrete ids into codebook of first stage vq model
+        # n_embed=None,                     # custom support for prediction of discrete ids into codebook of first stage vq model
         legacy=False,                     # False all for v1.5 and v2.1
         use_linear_in_transformer=False,  # True for v2.1, False for v1.5
     ):
@@ -376,7 +377,7 @@ class UNetModel(nn.Module):
         self.dropout = dropout
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
-        self.dtype = torch.float16 if use_fp16 else torch.float32
+        # self.dtype = torch.float16 if use_fp16 else torch.float32
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
 
@@ -392,7 +393,7 @@ class UNetModel(nn.Module):
                 TimestepEmbedSequentialForNormal(conv_nd(dims, in_channels, model_channels, 3, padding=1))
             ]
         )
-        self._feature_size = model_channels
+        # self._feature_size = model_channels
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
@@ -421,7 +422,7 @@ class UNetModel(nn.Module):
                         )
                     )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
-                self._feature_size += ch
+                # self._feature_size += ch
 
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
@@ -433,7 +434,7 @@ class UNetModel(nn.Module):
                 ch = out_ch
                 input_block_chans.append(ch)
                 ds *= 2
-                self._feature_size += ch
+                # self._feature_size += ch
 
         if num_head_channels == -1:
             dim_head = ch // num_heads
@@ -456,7 +457,7 @@ class UNetModel(nn.Module):
                 dims=dims,
             ),
         )
-        self._feature_size += ch
+        # self._feature_size += ch
 
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
@@ -487,7 +488,7 @@ class UNetModel(nn.Module):
                     layers.append(Upsample(ch, conv_resample, dims=dims, out_channels=out_ch))
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
-                self._feature_size += ch
+                # self._feature_size += ch
 
         self.out = nn.Sequential(
             normalization(ch),
@@ -495,23 +496,25 @@ class UNetModel(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
 
-    def convert_to_fp16(self):
-        """
-        Convert the torso of the model to float16.
-        """
-        self.input_blocks.apply(convert_module_to_f16)
-        self.middle_block.apply(convert_module_to_f16)
-        self.output_blocks.apply(convert_module_to_f16)
+    # xxxx3333
+    # def convert_to_fp16(self):
+    #     """
+    #     Convert the torso of the model to float16.
+    #     """
+    #     self.input_blocks.apply(convert_module_to_f16)
+    #     self.middle_block.apply(convert_module_to_f16)
+    #     self.output_blocks.apply(convert_module_to_f16)
 
-    def convert_to_fp32(self):
-        """
-        Convert the torso of the model to float32.
-        """
-        self.input_blocks.apply(convert_module_to_f32)
-        self.middle_block.apply(convert_module_to_f32)
-        self.output_blocks.apply(convert_module_to_f32)
+    # def convert_to_fp32(self):
+    #     """
+    #     Convert the torso of the model to float32.
+    #     """
+    #     self.input_blocks.apply(convert_module_to_f32)
+    #     self.middle_block.apply(convert_module_to_f32)
+    #     self.output_blocks.apply(convert_module_to_f32)
 
-    def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
+    # def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
+    def forward(self, x, timesteps: Optional[torch.Tensor]=None, context: Optional[torch.Tensor]=None, y: Optional[torch.Tensor]=None):
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -524,7 +527,7 @@ class UNetModel(nn.Module):
         t_emb = timestep_embedding(timesteps, self.model_channels)
         emb = self.time_embed(t_emb)
 
-        h = x.type(self.dtype)
+        h = x # x.type(self.dtype)
         for module in self.input_blocks:
             h = module(h, emb, context)
             hs.append(h)

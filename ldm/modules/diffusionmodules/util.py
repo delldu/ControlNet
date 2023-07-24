@@ -132,7 +132,7 @@ def linear(*args, **kwargs):
     return nn.Linear(*args, **kwargs)
 
 
-def avg_pool_nd(dims, *args, **kwargs):
+def avg_pool_nd(dims: int, *args, **kwargs):
     """
     Create a 1D, 2D, or 3D average pooling module.
     """

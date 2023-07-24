@@ -103,9 +103,9 @@ class CrossAttention(nn.Module):
         v = self.to_v(context)
 
         # q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
-        q = self.BxNxHxD_BHxNxD(q.reshape(q.shape[0], q.shape[1], h, q.shpe[2] // h))
-        k = self.BxNxHxD_BHxNxD(k.reshape(k.shape[0], k.shape[1], h, k.shpe[2] // h))
-        v = self.BxNxHxD_BHxNxD(v.reshape(v.shape[0], v.shape[1], h, v.shpe[2] // h))
+        q = self.BxNxHxD_BHxNxD(q.reshape(q.shape[0], q.shape[1], h, -1)) # q.shpe[2] // h
+        k = self.BxNxHxD_BHxNxD(k.reshape(k.shape[0], k.shape[1], h, -1))
+        v = self.BxNxHxD_BHxNxD(v.reshape(v.shape[0], v.shape[1], h, -1))
         sim = torch.einsum('b i d, b j d -> b i j', q, k) * self.scale
         del q, k
     
@@ -114,7 +114,7 @@ class CrossAttention(nn.Module):
 
         out = torch.einsum('b i j, b j d -> b i d', sim, v)
         # out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
-        out = self.BxHxNxD_BxNxHD(out.reshape(out.shape[0]//h, h, n, d))
+        out = self.BxHxNxD_BxNxHD(out.reshape(-1, h, n, d)) # out.shape[0]//h
 
         return self.to_out(out)
 

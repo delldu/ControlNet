@@ -23,17 +23,17 @@ model = create_model('./models/cldm_v15.yaml').cpu()
 
 # torch.jit.script(model.model.diffusion_model.time_embed)
 # pdb.set_trace()
-# torch.jit.script(model.model.diffusion_model.input_blocks)
+# torch.jit.script(model.model.diffusion_model.input_blocks) ## error
 # pdb.set_trace()
-# torch.jit.script(model.model.diffusion_model.middle_block)
+# torch.jit.script(model.model.diffusion_model.middle_block)  ## error
 # pdb.set_trace()
-# torch.jit.script(model.model.diffusion_model.output_blocks)
+# torch.jit.script(model.model.diffusion_model.output_blocks)   ## error
 # pdb.set_trace()
 # torch.jit.script(model.model.diffusion_model.out)
 # pdb.set_trace()
-# torch.jit.script(model.first_stage_model)
+# torch.jit.script(model.first_stage_model) #    ## error
 # pdb.set_trace()
-# torch.jit.script(model.cond_stage_model)
+# torch.jit.script(model.cond_stage_model) # ## error
 # pdb.set_trace()
 # torch.jit.script(model.control_model)
 # pdb.set_trace()
@@ -45,6 +45,7 @@ model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', locatio
 # model.control_model.load_state_dict(load_state_dict('./models/control_v11p_sd21_canny.safetensors', location='cpu'))
 model = model.cuda()
 
+model = torch.compile(model)
 
 
 ddim_sampler = DDIMSampler(model)

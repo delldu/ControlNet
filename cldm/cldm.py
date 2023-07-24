@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import pdb
 
 from ldm.modules.diffusionmodules.util import (
     conv_nd,
@@ -15,6 +14,7 @@ from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     ResBlock, Downsample
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.util import exists, instantiate_from_config
+from typing import Optional
 
 import pdb
 
@@ -22,7 +22,8 @@ class ControlledUnetModel(UNetModel):
     '''
         diffusion_model
     '''
-    def forward(self, x, timesteps=None, context=None, control=None, only_mid_control:bool=False):
+    def forward(self, x, timesteps: Optional[torch.Tensor]=None, context: Optional[torch.Tensor]=None, 
+        control: Optional[torch.Tensor]=None, only_mid_control:bool=False):
         hs = []
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels)

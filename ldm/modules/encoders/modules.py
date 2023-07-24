@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import CLIPTokenizer, CLIPTextModel
+from typing import List
 
 import open_clip
 import pdb
@@ -46,7 +47,7 @@ class FrozenCLIPEmbedder(AbstractEncoder):
             param.requires_grad = False
 
     # xxxx1111
-    def forward(self, text: str):
+    def forward(self, text: List[str]):
         # ['bag, best quality, extremely detailed']
         batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
@@ -126,7 +127,7 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
             param.requires_grad = False
 
     # xxxx1111
-    def forward(self, text: str):
+    def forward(self, text: List[str]):
         # ['bag, best quality, extremely detailed']
         tokens = open_clip.tokenize(text) # size() -- [1, 77]
         z = self.encode_with_transformer(tokens.to(self.device))

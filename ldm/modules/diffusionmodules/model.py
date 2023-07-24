@@ -10,13 +10,14 @@ from typing import Optional, Any
 from ldm.modules.attention import MemoryEfficientCrossAttention
 import pdb
 
-try:
-    import xformers
-    import xformers.ops
-    XFORMERS_IS_AVAILBLE = True
-except:
-    XFORMERS_IS_AVAILBLE = False
-    print("No module 'xformers'. Proceeding without it.")
+XFORMERS_IS_AVAILBLE = False
+# try:
+#     import xformers
+#     import xformers.ops
+#     XFORMERS_IS_AVAILBLE = True
+# except:
+#     XFORMERS_IS_AVAILBLE = False
+#     print("No module 'xformers'. Proceeding without it.")
 
 def nonlinearity(x):
     # swish
@@ -271,11 +272,11 @@ class MemoryEfficientCrossAttentionWrapper(MemoryEfficientCrossAttention):
         self.BxCxHxW_BxHWxC = Rearrange('b c h w -> b (h w) c')
         self.BxHxWxC_BxCxHxW = Rearrange('b h w c -> b c h w')
 
-    def forward(self, x, context=None, mask=None):
+    def forward(self, x, context: Optional[torch.Tensor]=None, mask: Optional[torch.Tensor]=None):
         b, c, h, w = x.shape
         # x = rearrange(x, 'b c h w -> b (h w) c')
         x = self.BxCxHxW_BxHWxC(x)
-        out = super().forward(x, context=context, mask=mask)
+        out = super().forward(x, context=context, mask=mask) # xxxx8888
         # out = rearrange(out, 'b (h w) c -> b c h w', h=h, w=w, c=c)
         out = self.BxHxWxC_BxCxHxW(out.reshape(b, h, w, c))
         return x + out
@@ -378,7 +379,7 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         # timestep embedding
-        temb = None
+        temb: Optional[torch.Tensor] = None
 
         # downsampling
         hs = [self.conv_in(x)]
@@ -486,7 +487,7 @@ class Decoder(nn.Module):
         self.last_z_shape = z.shape
 
         # timestep embedding
-        temb = None
+        temb: Optional[torch.Tensor] = None
 
         # z to block_in
         h = self.conv_in(z)
