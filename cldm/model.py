@@ -1,10 +1,6 @@
 import os
 import torch
 
-from omegaconf import OmegaConf
-from ldm.util import instantiate_from_config
-
-
 def get_state_dict(d):
     return d.get('state_dict', d)
 
@@ -23,13 +19,9 @@ def load_state_dict(ckpt_path, location='cpu'):
 
 
 def create_model(version):
-    # config = OmegaConf.load(config_path)
-    # model = instantiate_from_config(config.model).cpu()
-    # model = cldm.cldm.ControlLDM()
+    print(f'Create model {version} ...')
+
     from cldm.cldm import ControlLDM
-
     model = ControlLDM(version)
-        
 
-    print(f'Loaded model config from [{version}]')
     return model

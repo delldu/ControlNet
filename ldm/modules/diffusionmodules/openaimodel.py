@@ -19,13 +19,6 @@ from typing import Optional
 
 import pdb
 
-# dummy replace
-def convert_module_to_f16(x):
-    pass
-
-def convert_module_to_f32(x):
-    pass
-
 
 ## go
 class AttentionPool2d(nn.Module):
@@ -171,7 +164,7 @@ class ResBlock(nn.Module): #  TimestepBlock
 
         self.channels = channels
         self.emb_channels = emb_channels
-        self.dropout = dropout
+        # self.dropout = dropout
         self.out_channels = out_channels or channels
 
         self.in_layers = nn.Sequential(
@@ -232,36 +225,37 @@ def count_flops_attn(model, _x, y):
     model.total_ops += torch.DoubleTensor([matmul_ops])
 
 
-class QKVAttentionLegacy(nn.Module):
-    """
-    A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping
-    """
+# xxxx3333
+# class QKVAttentionLegacy(nn.Module):
+#     """
+#     A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping
+#     """
 
-    def __init__(self, n_heads):
-        super().__init__()
-        self.n_heads = n_heads
+#     def __init__(self, n_heads):
+#         super().__init__()
+#         self.n_heads = n_heads
 
-    def forward(self, qkv):
-        """
-        Apply QKV attention.
-        :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
-        :return: an [N x (H * C) x T] tensor after attention.
-        """
-        bs, width, length = qkv.shape
-        assert width % (3 * self.n_heads) == 0
-        ch = width // (3 * self.n_heads)
-        q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
-        scale = 1 / math.sqrt(math.sqrt(ch))
-        weight = torch.einsum(
-            "bct,bcs->bts", q * scale, k * scale
-        )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight.float(), dim=-1) # .type(weight.dtype)
-        a = torch.einsum("bts,bcs->bct", weight, v)
-        return a.reshape(bs, -1, length)
+#     def forward(self, qkv):
+#         """
+#         Apply QKV attention.
+#         :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
+#         :return: an [N x (H * C) x T] tensor after attention.
+#         """
+#         bs, width, length = qkv.shape
+#         assert width % (3 * self.n_heads) == 0
+#         ch = width // (3 * self.n_heads)
+#         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
+#         scale = 1 / math.sqrt(math.sqrt(ch))
+#         weight = torch.einsum(
+#             "bct,bcs->bts", q * scale, k * scale
+#         )  # More stable with f16 than dividing afterwards
+#         weight = torch.softmax(weight.float(), dim=-1) # .type(weight.dtype)
+#         a = torch.einsum("bts,bcs->bct", weight, v)
+#         return a.reshape(bs, -1, length)
 
-    @staticmethod
-    def count_flops(model, _x, y):
-        return count_flops_attn(model, _x, y)
+#     @staticmethod
+#     def count_flops(model, _x, y):
+#         return count_flops_attn(model, _x, y)
 
 
 class QKVAttention(nn.Module):
@@ -306,7 +300,6 @@ class UNetModel(nn.Module):
     def __init__(
         self,
         version="v1.5",
-        image_size=32,
         in_channels=4,
         model_channels=320, # 320
         out_channels=4,
@@ -316,16 +309,10 @@ class UNetModel(nn.Module):
         channel_mult=[1, 2, 4, 4],
         conv_resample=True,
         dims=2,
-        use_checkpoint=True, # True for v1.5 and v2.1
-        num_heads=-1, # 8 for v1.5, -1 for v2.1
-        num_head_channels=-1, # -1 for v1.5, 64 for v2.1
-        use_spatial_transformer=True,     # True all for v1.5 and v2.1 custom transformer support
         transformer_depth=1,              # custom transformer support
-        context_dim=None,                 # custom transformer support
-        legacy=False,                     # False all for v1.5 and v2.1
-        use_linear_in_transformer=False,  # True for v2.1, False for v1.5
     ):
         super().__init__()
+        self.version = version
 
         if version == "v1.5":
             num_heads = 8
@@ -339,43 +326,34 @@ class UNetModel(nn.Module):
             context_dim = 1024
             use_linear_in_transformer = True
 
-        self.version = version
+        # xxxx3333
+        # if context_dim is not None:
+        #     from omegaconf.listconfig import ListConfig
+        #     if type(context_dim) == ListConfig:
+        #         context_dim = list(context_dim)
 
-        if use_spatial_transformer:
-            assert context_dim is not None, 'Fool!! You forgot to include the dimension of your cross-attention conditioning...'
+        # pdb.set_trace()
 
-        if context_dim is not None:
-            assert use_spatial_transformer, 'Fool!! You forgot to use the spatial transformer for your cross-attention conditioning...'
-            from omegaconf.listconfig import ListConfig
-            if type(context_dim) == ListConfig:
-                context_dim = list(context_dim)
 
-        if num_heads == -1:
-            assert num_head_channels != -1, 'Either num_heads or num_head_channels has to be set'
+        # if num_heads == -1:
+        #     assert num_head_channels != -1, 'Either num_heads or num_head_channels has to be set'
 
-        if num_head_channels == -1:
-            assert num_heads != -1, 'Either num_heads or num_head_channels has to be set'
+        # if num_head_channels == -1:
+        #     assert num_heads != -1, 'Either num_heads or num_head_channels has to be set'
 
-        self.image_size = image_size
         self.in_channels = in_channels
         self.model_channels = model_channels
         self.out_channels = out_channels
-        if isinstance(num_res_blocks, int):
-            self.num_res_blocks = len(channel_mult) * [num_res_blocks]
-        else:
-            if len(num_res_blocks) != len(channel_mult):
-                raise ValueError("provide num_res_blocks either as an int (globally constant) or "
-                                 "as a list/tuple (per-level) with the same length as channel_mult")
-            self.num_res_blocks = num_res_blocks
+        self.num_res_blocks = len(channel_mult) * [num_res_blocks]
 
-        self.attention_resolutions = attention_resolutions
-        self.dropout = dropout
-        self.channel_mult = channel_mult
-        self.conv_resample = conv_resample
+        # xxxx3333
+        # self.attention_resolutions = attention_resolutions
+        # self.dropout = dropout
+        # self.channel_mult = channel_mult
+        # self.conv_resample = conv_resample
 
-        # self.dtype = torch.float16 if use_fp16 else torch.float32
         self.num_heads = num_heads
-        self.num_head_channels = num_head_channels
+        # self.num_head_channels = num_head_channels
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -385,11 +363,9 @@ class UNetModel(nn.Module):
         )
 
         self.input_blocks = nn.ModuleList(
-            [
-                TimestepEmbedSequentialForNormal(conv_nd(dims, in_channels, model_channels, 3, padding=1))
-            ]
+            [ TimestepEmbedSequentialForNormal(conv_nd(dims, in_channels, model_channels, 3, padding=1)) ]
         )
-        # self._feature_size = model_channels
+
         input_block_chans = [model_channels]
         ch = model_channels
         ds = 1
@@ -418,7 +394,6 @@ class UNetModel(nn.Module):
                         )
                     )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
-                # self._feature_size += ch
 
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
@@ -430,7 +405,6 @@ class UNetModel(nn.Module):
                 ch = out_ch
                 input_block_chans.append(ch)
                 ds *= 2
-                # self._feature_size += ch
 
         if num_head_channels == -1:
             dim_head = ch // num_heads
@@ -453,7 +427,6 @@ class UNetModel(nn.Module):
                 dims=dims,
             ),
         )
-        # self._feature_size += ch
 
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
@@ -484,7 +457,6 @@ class UNetModel(nn.Module):
                     layers.append(Upsample(ch, conv_resample, dims=dims, out_channels=out_ch))
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
-                # self._feature_size += ch
 
         self.out = nn.Sequential(
             normalization(ch),
@@ -514,5 +486,5 @@ class UNetModel(nn.Module):
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context)
-        h = h.type(x.dtype)
+        # h = h.type(x.dtype)
         return self.out(h)

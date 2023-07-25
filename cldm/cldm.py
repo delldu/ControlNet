@@ -17,7 +17,6 @@ from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     TimestepEmbedSequential, TimestepEmbedSequentialForNormal, \
     ResBlock, Downsample
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.util import instantiate_from_config
 
 from tqdm import tqdm
 
@@ -65,7 +64,6 @@ class ControlNet(nn.Module):
     def __init__(
             self,
             version="v1.5",
-            image_size = 32,
             in_channels = 4,
             model_channels = 320,
             hint_channels = 3,
@@ -75,18 +73,12 @@ class ControlNet(nn.Module):
             channel_mult=[1, 2, 4, 4],
             conv_resample=True,
             dims=2,
-            use_checkpoint=True,
             num_heads_upsample=8,
-            use_spatial_transformer=True,  # True all for v1.5 and v2.1 custom transformer support
             transformer_depth=1,  # custom transformer support
-            n_embed=None,  # custom support for prediction of discrete ids into codebook of first stage vq model
-            legacy=False,
-            num_heads=8, # -1 for v2.1, 8 for v1.5
-            num_head_channels=-1, # 64 for v2.1, -1 for v1.5
-            context_dim=768,  # 768 for v1.5, 1024 for v2.1 custom transformer support
-            use_linear_in_transformer=False, # True for v2.1, False for v1.5
     ):
         super().__init__()
+        self.version=version
+        # pdb.set_trace()
         if version == "v1.5":
             num_heads = 8
             num_head_channels = -1
@@ -99,36 +91,29 @@ class ControlNet(nn.Module):
             context_dim = 1024
             use_linear_in_transformer = True
 
-        self.version=version
-
-        if use_spatial_transformer:
-            assert context_dim is not None, 'Fool!! You forgot to include the dimension of your cross-attention conditioning...'
-
-        if context_dim is not None: # True
-            assert use_spatial_transformer, 'Fool!! You forgot to use the spatial transformer for your cross-attention conditioning...'
-            from omegaconf.listconfig import ListConfig
-            if type(context_dim) == ListConfig:
-                context_dim = list(context_dim)
+        # xxxx3333
+        # if context_dim is not None: # True
+        #     from omegaconf.listconfig import ListConfig
+        #     if type(context_dim) == ListConfig:
+        #         context_dim = list(context_dim)
 
         if num_heads_upsample == -1: # False
             num_heads_upsample = num_heads
 
-        if num_heads == -1: # False
-            assert num_head_channels != -1, 'Either num_heads or num_head_channels has to be set'
+        # if num_heads == -1: # False
+        #     assert num_head_channels != -1, 'Either num_heads or num_head_channels has to be set'
 
-        if num_head_channels == -1: # False
-            assert num_heads != -1, 'Either num_heads or num_head_channels has to be set'
+        # if num_head_channels == -1: # False
+        #     assert num_heads != -1, 'Either num_heads or num_head_channels has to be set'
 
         self.dims = dims
-        self.image_size = image_size
-        self.in_channels = in_channels
         self.model_channels = model_channels
         self.num_res_blocks = len(channel_mult) * [num_res_blocks] # [2, 2, 2, 2]
 
-        self.attention_resolutions = attention_resolutions
-        self.dropout = dropout
-        self.channel_mult = channel_mult
-        self.use_checkpoint = use_checkpoint
+        # xxxx3333
+        # self.attention_resolutions = attention_resolutions
+        # self.dropout = dropout
+        # self.channel_mult = channel_mult
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
@@ -269,16 +254,10 @@ class ControlNet(nn.Module):
 
 # xxxx1111, start root ...
 class ControlLDM(LatentDiffusion): # DDPM(nn.Module)
-    def __init__(self, version="v1.5"): # control_stage_config, control_key, only_mid_control, *args, **kwargs):
-        super().__init__(version=version) # *args, **kwargs)
-        # control_stage_config.get('params').get('image_size')
-
-        self.control_model = ControlNet(version) # instantiate_from_config(control_stage_config) # ControlNet(version)
-        # self.control_key = control_key
-        # self.only_mid_control = only_mid_control
+    def __init__(self, version="v1.5"):
+        super().__init__(version=version)
+        self.control_model = ControlNet(version)
         self.control_scales = [1.0] * 13
-        # control_key = 'hint'
-        # args = ()
 
     def apply_model(self, x_noisy, t, cond):
         # x_noisy.size() -- [1, 4, 80, 64]
