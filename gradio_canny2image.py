@@ -18,25 +18,21 @@ apply_canny = CannyDetector()
 # model = create_model('./models/cldm_v15.yaml').cpu()
 model = create_model('v1.5').cpu()
 
-# model = torch.jit.script(model)
 
-# pdb.set_trace()
-
+pdb.set_trace()
+# 1) torch.jit.script(model.model)
 # torch.jit.script(model.model.diffusion_model)
 # torch.jit.script(model.model.diffusion_model.time_embed)
 # torch.jit.script(model.model.diffusion_model.input_blocks)
 # torch.jit.script(model.model.diffusion_model.middle_block)
 # torch.jit.script(model.model.diffusion_model.output_blocks)
 # torch.jit.script(model.model.diffusion_model.out)
-# pdb.set_trace()
+# 2) torch.jit.script(model.first_stage_model)
 
-# torch.jit.script(model.first_stage_model) # error
-# File "/home/dell/miniconda3/envs/python39/lib/python3.9/site-packages/transformers/models/clip/modeling_clip.py", line 221
-
+# 3) torch.jit.script(model.cond_stage_model)
 # torch.jit.script(model.cond_stage_model.transformer) # CLIPTextModel error
 # *** RuntimeError: Can't redefine method: forward on class: __torch__.transformers.models.clip.modeling_clip.CLIPTextEmbeddings (of Python compilation unit at: 0x4fcee80)
-
-# torch.jit.script(model.control_model)
+# 4) torch.jit.script(model.control_model)
 
 model.load_state_dict(load_state_dict('./models/control_sd15_canny.pth', location='cpu'), strict=False)
 

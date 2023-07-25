@@ -27,7 +27,6 @@ class AutoencoderKL(nn.Module):
         # self.quant_conv -- Conv2d(8, 8, kernel_size=(1, 1), stride=(1, 1))
         self.post_quant_conv = nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
         # self.post_quant_conv -- Conv2d(4, 4, kernel_size=(1, 1), stride=(1, 1))
-        self.embed_dim = embed_dim
 
     def decode(self, z):
         # z.size() -- [1, 4, 80, 64]
