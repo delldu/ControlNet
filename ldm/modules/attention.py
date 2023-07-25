@@ -1,5 +1,4 @@
 from inspect import isfunction
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,11 +12,6 @@ try:
     XFORMERS_IS_AVAILBLE = True
 except:
     XFORMERS_IS_AVAILBLE = False
-
-# xxxx3333
-# # CrossAttn precision handling
-# import os
-# _ATTN_PRECISION = os.environ.get("ATTN_PRECISION", "fp32")
 
 def exists(val):
     return val is not None
@@ -164,19 +158,6 @@ class MemoryEfficientCrossAttention(nn.Module):
             .reshape(B * self.heads, k.shape[1], self.dim_head).contiguous()
         v = v.unsqueeze(3).reshape(B, v.shape[1], self.heads, self.dim_head).permute(0, 2, 1, 3) \
             .reshape(B * self.heads, v.shape[1], self.dim_head).contiguous()
-
-        # actually compute the attention, what we cannot get enough of
-        # def memory_efficient_attention(
-        #     query: torch.Tensor,
-        #     key: torch.Tensor,
-        #     value: torch.Tensor,
-        #     attn_bias: Optional[Union[torch.Tensor, AttentionBias]] = None,
-        #     p: float = 0.0,
-        #     scale: Optional[float] = None,
-        #     *,
-        #     op: Optional[AttentionOp] = None,
-        # ) -> torch.Tensor:
-
 
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 

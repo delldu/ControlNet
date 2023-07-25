@@ -1,11 +1,10 @@
 import torch
-# from ldm.modules.diffusionmodules.model import Encoder, Decoder
+import torch.nn as nn
 from ldm.modules.diffusionmodules.model import Decoder
 
 import pdb
 
-# xxxx1111
-class AutoencoderKL(torch.nn.Module): 
+class AutoencoderKL(nn.Module): 
     def __init__(self,
                 version="v1.5",
                 embed_dim = 4,
@@ -24,9 +23,9 @@ class AutoencoderKL(torch.nn.Module):
 
         # self.encoder = Encoder(**ddconfig)
         self.decoder = Decoder(**ddconfig)
-        self.quant_conv = torch.nn.Conv2d(2*ddconfig["z_channels"], 2*embed_dim, 1)
+        self.quant_conv = nn.Conv2d(2*ddconfig["z_channels"], 2*embed_dim, 1)
         # self.quant_conv -- Conv2d(8, 8, kernel_size=(1, 1), stride=(1, 1))
-        self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
+        self.post_quant_conv = nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
         # self.post_quant_conv -- Conv2d(4, 4, kernel_size=(1, 1), stride=(1, 1))
         self.embed_dim = embed_dim
 

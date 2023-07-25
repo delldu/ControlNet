@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 from transformers import CLIPTokenizer, CLIPTextModel
-from typing import List
-
 import open_clip
+
+from typing import List
 import pdb
 
-# xxxx1111 for v1.5
+# for v1.5
 class FrozenCLIPEmbedder(nn.Module): # cond_stage_config
     """Uses the CLIP transformer encoder for text (from huggingface)"""
     LAYERS = [
@@ -14,20 +14,16 @@ class FrozenCLIPEmbedder(nn.Module): # cond_stage_config
         # "pooled",
         # "hidden"
     ]
-    def __init__(self, version="openai/clip-vit-large-patch14", device="cuda", max_length=77,
-                 freeze=True, layer="last", layer_idx=None):  # clip-vit-base-patch32
+    def __init__(self, version="openai/clip-vit-large-patch14", device="cuda", max_length=77, layer="last"):
+        # clip-vit-base-patch32
         super().__init__()
-        # layer = 'last'
-        # layer_idx = None
-
         assert layer in self.LAYERS
+
         self.tokenizer = CLIPTokenizer.from_pretrained(version) # <class 'transformers.models.clip.tokenization_clip.CLIPTokenizer'>
         self.transformer = CLIPTextModel.from_pretrained(version) # <class 'transformers.models.clip.modeling_clip.CLIPTextModel'>
-        self.device = device
+        self.device = device # xxxx8888
         self.max_length = max_length
-        if freeze: # True
-            self.freeze()
-        self.layer = layer # 'last'
+        self.freeze()
 
         # xxxx8888 self.transformer.text_model.embeddings -- CLIPTextEmbeddings
         # xxxx8888 self.transformer.text_model.encoder -- CLIPEncoder
@@ -38,7 +34,6 @@ class FrozenCLIPEmbedder(nn.Module): # cond_stage_config
         for param in self.parameters():
             param.requires_grad = False
 
-    # xxxx1111
     def forward(self, text: List[str]):
         # ['bag, best quality, extremely detailed']
 
@@ -46,7 +41,7 @@ class FrozenCLIPEmbedder(nn.Module): # cond_stage_config
         # batch_encoding.keys() -- dict_keys(['input_ids', 'attention_mask'])
 
         tokens = batch_encoding["input_ids"].to(self.device) # size() -- [1, 77]
-        outputs = self.transformer(input_ids=tokens, output_hidden_states=self.layer=="hidden")
+        outputs = self.transformer(input_ids=tokens, output_hidden_states=False)
         #  outputs.keys() -- ['last_hidden_state', 'pooler_output']
 
         z = outputs.last_hidden_state
@@ -57,8 +52,8 @@ class FrozenCLIPEmbedder(nn.Module): # cond_stage_config
         return self(text)
 
 
-# xxxx1111 for v2.1
-class FrozenOpenCLIPEmbedder(nn.Module): # cond_stage_config
+# for v2.1
+class FrozenOpenCLIPEmbedder(nn.Module):
     """
     Uses the OpenCLIP transformer encoder for text
     """
@@ -67,10 +62,10 @@ class FrozenOpenCLIPEmbedder(nn.Module): # cond_stage_config
         # "last",
         "penultimate"
     ]
-    def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", device="cuda", max_length=77,
-                 freeze=True, layer="penultimate"):
+    def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", device="cuda", max_length=77, layer="penultimate"):
         super().__init__()
         assert layer in self.LAYERS
+
         model, _, _ = open_clip.create_model_and_transforms(arch, device=torch.device('cpu'), pretrained=version)
         del model.visual
         self.model = model
@@ -100,9 +95,7 @@ class FrozenOpenCLIPEmbedder(nn.Module): # cond_stage_config
 
         self.device = device
         self.max_length = max_length
-        if freeze:
-            self.freeze()
-        self.layer = layer
+        self.freeze()
         self.layer_idx = 1 # 0 -- for 'last' layer
 
         # self.model.attn_mask.size() -- [77, 77]
@@ -112,7 +105,6 @@ class FrozenOpenCLIPEmbedder(nn.Module): # cond_stage_config
         for param in self.parameters():
             param.requires_grad = False
 
-    # xxxx1111
     def forward(self, text: List[str]):
         # ['bag, best quality, extremely detailed']
         tokens = open_clip.tokenize(text) # size() -- [1, 77]
@@ -138,7 +130,6 @@ class FrozenOpenCLIPEmbedder(nn.Module): # cond_stage_config
 
         return x
 
-    # xxxx1111
     def encode(self, text: str):
         # text -- ['bag, best quality, extremely detailed']
         return self(text)

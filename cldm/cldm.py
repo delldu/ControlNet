@@ -20,12 +20,11 @@ from ldm.models.diffusion.ddpm import LatentDiffusion
 
 from tqdm import tqdm
 
-from typing import Optional, List
+from typing import List
 
 
 import pdb
 
-# xxxx1111
 class ControlledUnetModel(UNetModel):
     '''
         diffusion_model
@@ -59,7 +58,6 @@ class ControlledUnetModel(UNetModel):
         # h = h.type(x.dtype)
         return self.out(h) # self.out -- nn.Sequential from UNetModel
 
-# xxxx1111
 class ControlNet(nn.Module):
     def __init__(
             self,
@@ -78,7 +76,6 @@ class ControlNet(nn.Module):
     ):
         super().__init__()
         self.version=version
-        # pdb.set_trace()
         if version == "v1.5":
             num_heads = 8
             num_head_channels = -1
@@ -91,29 +88,13 @@ class ControlNet(nn.Module):
             context_dim = 1024
             use_linear_in_transformer = True
 
-        # xxxx3333
-        # if context_dim is not None: # True
-        #     from omegaconf.listconfig import ListConfig
-        #     if type(context_dim) == ListConfig:
-        #         context_dim = list(context_dim)
-
         if num_heads_upsample == -1: # False
             num_heads_upsample = num_heads
-
-        # if num_heads == -1: # False
-        #     assert num_head_channels != -1, 'Either num_heads or num_head_channels has to be set'
-
-        # if num_head_channels == -1: # False
-        #     assert num_heads != -1, 'Either num_heads or num_head_channels has to be set'
 
         self.dims = dims
         self.model_channels = model_channels
         self.num_res_blocks = len(channel_mult) * [num_res_blocks] # [2, 2, 2, 2]
 
-        # xxxx3333
-        # self.attention_resolutions = attention_resolutions
-        # self.dropout = dropout
-        # self.channel_mult = channel_mult
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
@@ -222,7 +203,6 @@ class ControlNet(nn.Module):
     def make_zero_conv(self, channels):
         return TimestepEmbedSequentialForNormal(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
-    # xxxx1111
     def forward(self, x, hint, timesteps, context):
         # x.size() -- [1, 4, 80, 64]
         # hint.size() -- [1, 3, 640, 512]

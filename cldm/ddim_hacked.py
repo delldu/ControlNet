@@ -57,8 +57,6 @@ class DDIMSampler(object):
         self.register_buffer('ddim_alphas_prev', ddim_alphas_prev)
         self.register_buffer('ddim_sqrt_one_minus_alphas', np.sqrt(1. - ddim_alphas))
 
-    # xxxx1111
-    @torch.no_grad()
     def sample(self,
                S,
                batch_size,
@@ -91,8 +89,6 @@ class DDIMSampler(object):
         # samples.size() -- [1, 4, 80, 64]
         return samples, intermediates
 
-    # xxxx1111
-    @torch.no_grad()
     def ddim_sampling(self, cond, shape,
                       timesteps=None, 
                       log_every_t=100,
@@ -127,7 +123,6 @@ class DDIMSampler(object):
 
         return img, intermediates
 
-    @torch.no_grad()
     def p_sample_ddim(self, x, c, t, index, 
                       repeat_noise=False,
                       unconditional_guidance_scale=1.,
@@ -137,7 +132,6 @@ class DDIMSampler(object):
         # x.size() -- [4, 4, 80, 64]
         # t -- tensor([951, 951, 951, 951], device='cuda:0'), index = 19 ...
 
-        # xxxx1111 !!!
         model_t = self.model.apply_model(x, t, c)
         model_uncond = self.model.apply_model(x, t, unconditional_conditioning)
         e_t = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)

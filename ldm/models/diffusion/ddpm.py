@@ -15,7 +15,6 @@ from ldm.modules.diffusionmodules.util import make_beta_schedule
 
 import pdb
 
-# xxxx1111
 class DiffusionWrapper(nn.Module):
     def __init__(self, version="v1.5"):
         super().__init__()
@@ -23,7 +22,6 @@ class DiffusionWrapper(nn.Module):
         from cldm.cldm import ControlledUnetModel
         self.diffusion_model = ControlledUnetModel(version)
 
-# xxxx1111
 class DDPM(nn.Module):
     # classic DDPM with Gaussian diffusion, in image space
     def __init__(self,
@@ -64,7 +62,6 @@ class DDPM(nn.Module):
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev', to_torch(alphas_cumprod_prev))
 
-# xxxx1111
 class LatentDiffusion(DDPM):
     """main class"""
     def __init__(self, version="v1.5", scale_factor=0.18215):
@@ -92,13 +89,10 @@ class LatentDiffusion(DDPM):
         for param in self.cond_stage_model.parameters():
             param.requires_grad = False
 
-    # xxxx1111
     def get_learned_conditioning(self, c):
         c = self.cond_stage_model.encode(c)
         return c
 
-    # xxxx1111
-    @torch.no_grad()
     def decode_first_stage(self, z):
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)
