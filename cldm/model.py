@@ -22,8 +22,14 @@ def load_state_dict(ckpt_path, location='cpu'):
     return state_dict
 
 
-def create_model(config_path):
-    config = OmegaConf.load(config_path)
-    model = instantiate_from_config(config.model).cpu()
-    print(f'Loaded model config from [{config_path}]')
+def create_model(version):
+    # config = OmegaConf.load(config_path)
+    # model = instantiate_from_config(config.model).cpu()
+    # model = cldm.cldm.ControlLDM()
+    from cldm.cldm import ControlLDM
+
+    model = ControlLDM(version)
+        
+
+    print(f'Loaded model config from [{version}]')
     return model

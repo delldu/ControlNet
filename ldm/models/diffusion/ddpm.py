@@ -12,26 +12,40 @@ import numpy as np
 from functools import partial
 from ldm.util import count_params, instantiate_from_config
 from ldm.modules.diffusionmodules.util import make_beta_schedule
+# from cldm.cldm import ControlledUnetModel
+
 import pdb
 
-class DDPM(torch.nn.Module):
+# xxxx1111
+class DiffusionWrapper(nn.Module):
+    def __init__(self, version="v1.5"): # , unet_config=None, conditioning_key=None
+        super().__init__()
+        from cldm.cldm import ControlledUnetModel
+        self.version = version
+        self.diffusion_model = ControlledUnetModel(version) # instantiate_from_config(unet_config) # unet_config -- cldm.cldm.ControlledUnetModel(version)
+        # self.conditioning_key = conditioning_key
+        # assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']
+
+# xxxx1111
+class DDPM(nn.Module):
     # classic DDPM with Gaussian diffusion, in image space
     def __init__(self,
-                 unet_config,
-                 timesteps=1000,
-                 monitor="val/loss",
-                 use_ema=True,
-                 first_stage_key="image",
-                 image_size=256,
-                 channels=3,
-                 log_every_t=100,
-                 linear_start=1e-4,
-                 linear_end=2e-2,
-                 conditioning_key='crossattn',
-                 parameterization="eps",  # all assuming fixed variance schedules
-                 ):
+                version="v1.5",
+                unet_config=None,
+                timesteps=1000,
+                monitor="val/loss",
+                use_ema=True,
+                first_stage_key="image",
+                image_size=256,
+                channels=3,
+                log_every_t=100,
+                linear_start=1e-4,
+                linear_end=2e-2,
+                conditioning_key='crossattn',
+                parameterization="eps",  # all assuming fixed variance schedules
+            ):
         super().__init__()
-
+        self.version=version
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
         self.cond_stage_model = None
@@ -39,7 +53,7 @@ class DDPM(torch.nn.Module):
         self.first_stage_key = first_stage_key
         self.image_size = image_size  # try conv?
         self.channels = channels
-        self.model = DiffusionWrapper(unet_config, conditioning_key) # xxxx1111 ????
+        self.model = DiffusionWrapper(version) # , unet_config, conditioning_key) # xxxx1111 ????
         count_params(self.model, verbose=True)
 
         if monitor is not None:
@@ -71,43 +85,48 @@ class DDPM(torch.nn.Module):
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev', to_torch(alphas_cumprod_prev))
 
-
+# xxxx1111
 class LatentDiffusion(DDPM):
     """main class"""
-    def __init__(self,
-                 first_stage_config,
-                 cond_stage_config,
-                 num_timesteps_cond=None,
-                 cond_stage_key="image",
+    def __init__(self, version="v1.5",
+                 # first_stage_config,
+                 # cond_stage_config,
+                 num_timesteps_cond=1,
+                 cond_stage_key="txt",
                  cond_stage_trainable=False,
                  conditioning_key='crossattn',
                  monitor ='val/loss_simple_ema',
-                 scale_factor=1.0,
+                 scale_factor=0.18215,
                  *args, **kwargs):
         # num_timesteps_cond = 1
         # cond_stage_key = 'txt'
         # scale_factor = 0.18215
 
-        super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
+        super().__init__(version=version) # conditioning_key=conditioning_key, *args, **kwargs)
 
-        self.cond_stage_key = cond_stage_key
-        try:
-            self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
-        except:
-            self.num_downs = 0
+        # self.cond_stage_key = cond_stage_key
         self.scale_factor = scale_factor
-        self.instantiate_first_stage(first_stage_config)
-        self.instantiate_cond_stage(cond_stage_config)
+        self.instantiate_first_stage(version) # first_stage_config, ldm.models.autoencoder.AutoencoderKL(version)
+        self.instantiate_cond_stage(version) # cond_stage_config
+        # ldm.modules.encoders.modules.FrozenOpenCLIPEmbedder for v2.1
+        # ldm.modules.encoders.modules.FrozenCLIPEmbedder for v1.5
 
 
-    def instantiate_first_stage(self, config):
-        model = instantiate_from_config(config)
+    def instantiate_first_stage(self, version):
+        from ldm.models.autoencoder import AutoencoderKL
+        model = AutoencoderKL(version) # instantiate_from_config(config)
         self.first_stage_model = model.eval()
         for param in self.first_stage_model.parameters():
             param.requires_grad = False
 
-    def instantiate_cond_stage(self, config):
-        model = instantiate_from_config(config)
+    def instantiate_cond_stage(self, version):
+        if version == "v1.5":
+            from ldm.modules.encoders.modules import FrozenCLIPEmbedder
+            model = FrozenCLIPEmbedder()
+        else:
+            from ldm.modules.encoders.modules import FrozenOpenCLIPEmbedder
+            model = FrozenOpenCLIPEmbedder()
+        # model = instantiate_from_config(config)
         self.cond_stage_model = model.eval()
         # self.cond_stage_model.train = disabled_train
         for param in self.cond_stage_model.parameters():
@@ -124,10 +143,3 @@ class LatentDiffusion(DDPM):
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)
 
-# xxxx1111
-class DiffusionWrapper(torch.nn.Module): # torch.nn.Module, pl.LightningModule
-    def __init__(self, diff_model_config, conditioning_key):
-        super().__init__()
-        self.diffusion_model = instantiate_from_config(diff_model_config)
-        self.conditioning_key = conditioning_key
-        assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']

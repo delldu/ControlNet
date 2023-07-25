@@ -301,51 +301,46 @@ class QKVAttention(nn.Module):
 class UNetModel(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
-    :param in_channels: channels in the input Tensor.
-    :param model_channels: base channel count for the model.
-    :param out_channels: channels in the output Tensor.
-    :param num_res_blocks: number of residual blocks per downsample.
-    :param attention_resolutions: a collection of downsample rates at which
-        attention will take place. May be a set, list, or tuple.
-        For example, if this contains 4, then at 4x downsampling, attention
-        will be used.
-    :param dropout: the dropout probability.
-    :param channel_mult: channel multiplier for each level of the UNet.
-    :param conv_resample: if True, use learned convolutions for upsampling and
-        downsampling.
-    :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param use_checkpoint: use gradient checkpointing to reduce memory usage.
-    :param num_heads: the number of attention heads in each attention layer.
-    :param num_heads_channels: if specified, ignore num_heads and instead use
-                               a fixed channel width per attention head.
-    :param use_new_attention_order: use a different attention pattern for potentially
-                                    increased efficiency.
     """
 
     def __init__(
         self,
-        image_size,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
+        version="v1.5",
+        image_size=32,
+        in_channels=4,
+        model_channels=320, # 320
+        out_channels=4,
+        num_res_blocks=2,
+        attention_resolutions=[4, 2, 1], 
         dropout=0.0,
-        channel_mult=(1, 2, 4, 8),
+        channel_mult=[1, 2, 4, 4],
         conv_resample=True,
         dims=2,
         use_checkpoint=True, # True for v1.5 and v2.1
-        # use_fp16=False,
-        num_heads=-1,
-        num_head_channels=-1, # 64 for v2.1
+        num_heads=-1, # 8 for v1.5, -1 for v2.1
+        num_head_channels=-1, # -1 for v1.5, 64 for v2.1
         use_spatial_transformer=True,     # True all for v1.5 and v2.1 custom transformer support
         transformer_depth=1,              # custom transformer support
         context_dim=None,                 # custom transformer support
-        # n_embed=None,                     # custom support for prediction of discrete ids into codebook of first stage vq model
         legacy=False,                     # False all for v1.5 and v2.1
         use_linear_in_transformer=False,  # True for v2.1, False for v1.5
     ):
         super().__init__()
+
+        if version == "v1.5":
+            num_heads = 8
+            num_head_channels = -1
+            context_dim = 768
+            use_linear_in_transformer = False
+        else:
+            # for v2.1 --
+            num_heads = -1
+            num_head_channels = 64 # need to fix for flash-attn
+            context_dim = 1024
+            use_linear_in_transformer = True
+
+        self.version = version
+
         if use_spatial_transformer:
             assert context_dim is not None, 'Fool!! You forgot to include the dimension of your cross-attention conditioning...'
 
@@ -377,6 +372,7 @@ class UNetModel(nn.Module):
         self.dropout = dropout
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
+
         # self.dtype = torch.float16 if use_fp16 else torch.float32
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
@@ -409,11 +405,11 @@ class UNetModel(nn.Module):
                 ]
                 ch = mult * model_channels
                 if ds in attention_resolutions: # [4, 2, 1]
-                    if num_head_channels == -1:
-                        dim_head = ch // num_heads
+                    if num_head_channels == -1: # for v1.5
+                        dim_head = ch // num_heads # num_heads -- 8, dim_head = ?
                     else:
                         num_heads = ch // num_head_channels
-                        dim_head = num_head_channels
+                        dim_head = num_head_channels # num_head_channels -- 64, num_heads = ?
 
                     layers.append(
                         SpatialTransformer(
@@ -496,24 +492,7 @@ class UNetModel(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
 
-    # xxxx3333
-    # def convert_to_fp16(self):
-    #     """
-    #     Convert the torso of the model to float16.
-    #     """
-    #     self.input_blocks.apply(convert_module_to_f16)
-    #     self.middle_block.apply(convert_module_to_f16)
-    #     self.output_blocks.apply(convert_module_to_f16)
 
-    # def convert_to_fp32(self):
-    #     """
-    #     Convert the torso of the model to float32.
-    #     """
-    #     self.input_blocks.apply(convert_module_to_f32)
-    #     self.middle_block.apply(convert_module_to_f32)
-    #     self.output_blocks.apply(convert_module_to_f32)
-
-    # def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
     def forward(self, x, timesteps: Optional[torch.Tensor]=None, context: Optional[torch.Tensor]=None, y: Optional[torch.Tensor]=None):
         """
         Apply the model to an input batch.

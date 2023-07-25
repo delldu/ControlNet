@@ -17,22 +17,27 @@ from ldm.modules.diffusionmodules.openaimodel import UNetModel, \
     TimestepEmbedSequential, TimestepEmbedSequentialForNormal, \
     ResBlock, Downsample
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.util import exists, instantiate_from_config
+from ldm.util import instantiate_from_config
 
 from tqdm import tqdm
 
-from typing import Optional
+from typing import Optional, List
 
 
 import pdb
 
+# xxxx1111
 class ControlledUnetModel(UNetModel):
     '''
         diffusion_model
     '''
-    def forward(self, x, timesteps: Optional[torch.Tensor]=None, context: Optional[torch.Tensor]=None, 
-        control: Optional[torch.Tensor]=None, only_mid_control:bool=False):
-        hs = []
+    def forward(self, x, timesteps, context, control: List[torch.Tensor]):
+        # x.size() -- [1, 4, 80, 64]
+        # timesteps -- tensor([801], device='cuda:0')
+        # context.size() -- [1, 77, 768]
+        # len(control) -- 13, control[0].size() -- [1, 320, 80, 64]
+
+        hs: List[torch.Tensor] = []
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels)
             emb = self.time_embed(t_emb)
@@ -46,19 +51,20 @@ class ControlledUnetModel(UNetModel):
             h += control.pop()
 
         for i, module in enumerate(self.output_blocks): # len(self.output_blocks) -- 12
-            if only_mid_control or control is None:
+            if control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
             else:
                 h = torch.cat([h, hs.pop() + control.pop()], dim=1)
             h = module(h, emb, context)
 
-        h = h.type(x.dtype)
-        return self.out(h)
+        # h = h.type(x.dtype)
+        return self.out(h) # self.out -- nn.Sequential from UNetModel
 
-
+# xxxx1111
 class ControlNet(nn.Module):
     def __init__(
             self,
+            version="v1.5",
             image_size = 32,
             in_channels = 4,
             model_channels = 320,
@@ -70,17 +76,30 @@ class ControlNet(nn.Module):
             conv_resample=True,
             dims=2,
             use_checkpoint=True,
-            num_heads=8,
-            num_head_channels=-1,
             num_heads_upsample=8,
             use_spatial_transformer=True,  # True all for v1.5 and v2.1 custom transformer support
             transformer_depth=1,  # custom transformer support
-            context_dim=768,  # custom transformer support
             n_embed=None,  # custom support for prediction of discrete ids into codebook of first stage vq model
             legacy=False,
+            num_heads=8, # -1 for v2.1, 8 for v1.5
+            num_head_channels=-1, # 64 for v2.1, -1 for v1.5
+            context_dim=768,  # 768 for v1.5, 1024 for v2.1 custom transformer support
             use_linear_in_transformer=False, # True for v2.1, False for v1.5
     ):
         super().__init__()
+        if version == "v1.5":
+            num_heads = 8
+            num_head_channels = -1
+            context_dim = 768
+            use_linear_in_transformer = False
+        else:
+            # for v2.1 --
+            num_heads = -1
+            num_head_channels = 64 # need to fix for flash-attn
+            context_dim = 1024
+            use_linear_in_transformer = True
+
+        self.version=version
 
         if use_spatial_transformer:
             assert context_dim is not None, 'Fool!! You forgot to include the dimension of your cross-attention conditioning...'
@@ -109,7 +128,6 @@ class ControlNet(nn.Module):
         self.attention_resolutions = attention_resolutions
         self.dropout = dropout
         self.channel_mult = channel_mult
-        self.conv_resample = conv_resample
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
@@ -219,13 +237,12 @@ class ControlNet(nn.Module):
     def make_zero_conv(self, channels):
         return TimestepEmbedSequentialForNormal(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
-    # def forward(self, x, hint, timesteps, context, **kwargs):
+    # xxxx1111
     def forward(self, x, hint, timesteps, context):
         # x.size() -- [1, 4, 80, 64]
         # hint.size() -- [1, 3, 640, 512]
         # timesteps = tensor([951], device='cuda:0')
         # context.size() -- [1, 77, 768]
-        # kwargs -- {}
 
         t_emb = timestep_embedding(timesteps, self.model_channels)
         emb = self.time_embed(t_emb)
@@ -251,42 +268,39 @@ class ControlNet(nn.Module):
 
 
 # xxxx1111, start root ...
-class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
-    def __init__(self, control_stage_config, control_key, only_mid_control, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class ControlLDM(LatentDiffusion): # DDPM(nn.Module)
+    def __init__(self, version="v1.5"): # control_stage_config, control_key, only_mid_control, *args, **kwargs):
+        super().__init__(version=version) # *args, **kwargs)
         # control_stage_config.get('params').get('image_size')
-        self.control_model = instantiate_from_config(control_stage_config)
-        self.control_key = control_key
-        self.only_mid_control = only_mid_control
+
+        self.control_model = ControlNet(version) # instantiate_from_config(control_stage_config) # ControlNet(version)
+        # self.control_key = control_key
+        # self.only_mid_control = only_mid_control
         self.control_scales = [1.0] * 13
         # control_key = 'hint'
-        # only_mid_control = False
         # args = ()
 
     def apply_model(self, x_noisy, t, cond):
         # x_noisy.size() -- [1, 4, 80, 64]
         # pp t -- tensor([951], device='cuda:0')
         # cond.keys() -- ['c_concat', 'c_crossattn']
-        # args -- (), kwargs -- {}
         assert isinstance(cond, dict)
 
-        diffusion_model = self.model.diffusion_model
         cond_txt = torch.cat(cond['c_crossattn'], 1) # cond['c_crossattn'][0].size() -- [1, 77, 1024]
 	    # ==> cond_txt.size() -- [1, 77, 1024]
 
         # cond['c_concat'][0].size() -- [1, 3, 640, 512]
         if cond['c_concat'] is None: # False
-            eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
+            eps = self.model.diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None)
         else:
             control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
             control = [c * scale for c, scale in zip(control, self.control_scales)]
-            eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
-        # self.only_mid_control -- False
+            eps = self.model.diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control)
         # eps.size() -- [1, 4, 80, 64]
         return eps
 
 
-    def low_vram_shift(self, is_diffusing):
+    def low_vram_shift(self, is_diffusing: bool):
         if is_diffusing:
             self.model = self.model.cuda()
             self.control_model = self.control_model.cuda()
@@ -299,7 +313,8 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
             self.cond_stage_model = self.cond_stage_model.cuda()
 
 
-    def forward(self, input_image, a_prompt, n_prompt, ddim_steps, strength, scale, seed, eta, save_memory=True):
+    def forward(self, input_image, a_prompt: str, n_prompt: str, ddim_steps: int, 
+        strength: float, scale: float, seed: int, eta: float, save_memory: bool=True):
         B, C, H, W = input_image.size()
         shape = (4, H // 8, W // 8)
         seed_everything(seed)
@@ -331,12 +346,12 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
 
     def sample(self,
                S,
-               batch_size,
-               shape,
+               batch_size: int,
+               shape: List[int],
                conditioning=None,
-               eta=0.,
-               verbose=True,
-               unconditional_guidance_scale=1.,
+               eta: float=0.,
+               verbose:bool =True,
+               unconditional_guidance_scale: float=1.,
                unconditional_conditioning=None,
                ):
 
@@ -389,8 +404,8 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
 
         return img
 
-    def p_sample_ddim(self, x, c, t, index, 
-                      unconditional_guidance_scale=1.,
+    def p_sample_ddim(self, x, c, t, index:int, 
+                      unconditional_guidance_scale:float=1.,
                       unconditional_conditioning=None,
                       ):
         b = x.shape[0]
@@ -399,7 +414,14 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
         # x.size() -- [4, 4, 80, 64]
         # t -- tensor([951, 951, 951, 951], device='cuda:0'), index = 19 ...
 
-        # xxxx1111 !!!
+        # c.keys() -- dict_keys(['c_concat', 'c_crossattn'])
+        # (Pdb) c['c_concat'][0].size() -- [1, 3, 640, 512]
+        # (Pdb) c['c_crossattn'][0].size() -- [1, 77, 768]
+
+        # unconditional_conditioning.keys() -- ['c_concat', 'c_crossattn']
+        # unconditional_conditioning['c_concat'][0].size() -- [1, 3, 640, 512]
+        # unconditional_conditioning['c_crossattn'][0].size() -- [1, 77, 768]
+
         model_t = self.apply_model(x, t, c)
         model_uncond = self.apply_model(x, t, unconditional_conditioning)
         e_t = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
@@ -421,7 +443,7 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
         return x_prev, pred_x0
 
 
-    def make_schedule(self, ddim_num_steps, ddim_eta=0., verbose=True):
+    def make_schedule(self, ddim_num_steps:int, ddim_eta: float=0., verbose: bool=True):
         self.ddim_timesteps = make_ddim_timesteps(num_ddim_timesteps=ddim_num_steps,
                                                   num_ddpm_timesteps=self.num_timesteps,verbose=verbose)
         # len(self.ddim_timesteps) -- 20
@@ -451,11 +473,6 @@ class ControlLDM(LatentDiffusion): # DDPM(pl.LightningModule)
         #        0.75214338, 0.67215145, 0.58881873, 0.50481856, 0.42288151,
         #        0.34555823, 0.27499905, 0.21278252, 0.15981644, 0.11632485,
         #        0.08191671, 0.05571903, 0.03654652, 0.02307699, 0.0140049 ])
-
-        # self.register_buffer('ddim_sigmas', ddim_sigmas)
-        # self.register_buffer('ddim_alphas', ddim_alphas)
-        # self.register_buffer('ddim_alphas_prev', ddim_alphas_prev)
-        # self.register_buffer('ddim_sqrt_one_minus_alphas', np.sqrt(1. - ddim_alphas))
 
         self.ddim_sigmas = ddim_sigmas
         self.ddim_alphas = ddim_alphas

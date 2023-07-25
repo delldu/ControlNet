@@ -113,6 +113,7 @@ class CrossAttention(nn.Module):
         sim = sim.softmax(dim=-1)
 
         out = torch.einsum('b i j, b j d -> b i d', sim, v)
+        bh, n, d = out.size()
         # out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
         out = self.BxHxNxD_BxNxHD(out.reshape(-1, h, n, d)) # out.shape[0]//h
 
@@ -164,6 +165,18 @@ class MemoryEfficientCrossAttention(nn.Module):
             .reshape(B * self.heads, v.shape[1], self.dim_head).contiguous()
 
         # actually compute the attention, what we cannot get enough of
+        # def memory_efficient_attention(
+        #     query: torch.Tensor,
+        #     key: torch.Tensor,
+        #     value: torch.Tensor,
+        #     attn_bias: Optional[Union[torch.Tensor, AttentionBias]] = None,
+        #     p: float = 0.0,
+        #     scale: Optional[float] = None,
+        #     *,
+        #     op: Optional[AttentionOp] = None,
+        # ) -> torch.Tensor:
+
+
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         out = (

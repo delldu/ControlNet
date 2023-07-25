@@ -4,23 +4,36 @@ from ldm.util import instantiate_from_config
 
 import pdb
 
+# xxxx1111
 class AutoencoderKL(torch.nn.Module): 
     def __init__(self,
-                 ddconfig,
-                 lossconfig,
-                 embed_dim,
-                 image_key="image",
-                 monitor='val/rec_loss',
-                 ):
+                version="v1.5",
+                # ddconfig,
+                # lossconfig,
+                embed_dim = 4,
+                image_key="image",
+                monitor='val/rec_loss',
+               ):
         super().__init__()
-        # ddconfig = {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}
+
+        ddconfig = {'double_z': True,
+            'z_channels': 4,
+            'resolution': 256,
+            'in_channels': 3,
+            'out_ch': 3,
+            'ch': 128,
+            'ch_mult': [1, 2, 4, 4],
+            'num_res_blocks': 2,
+            'attn_resolutions': [],
+            'dropout': 0.0}
+
         # lossconfig = {'target': 'torch.nn.Identity'}
         # embed_dim = 4
         # image_key = 'image'
         # monitor = 'val/rec_loss'
 
         self.image_key = image_key
-        self.encoder = Encoder(**ddconfig)
+        # self.encoder = Encoder(**ddconfig)
         self.decoder = Decoder(**ddconfig)
 
         self.quant_conv = torch.nn.Conv2d(2*ddconfig["z_channels"], 2*embed_dim, 1)

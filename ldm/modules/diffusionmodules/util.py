@@ -42,7 +42,7 @@ def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2,
     return betas.numpy()
 
 
-def make_ddim_timesteps(num_ddim_timesteps, num_ddpm_timesteps, verbose=True):
+def make_ddim_timesteps(num_ddim_timesteps: int, num_ddpm_timesteps: int, verbose: bool=True):
     c = num_ddpm_timesteps // num_ddim_timesteps
     ddim_timesteps = np.asarray(list(range(0, num_ddpm_timesteps, c)))
 
@@ -54,7 +54,7 @@ def make_ddim_timesteps(num_ddim_timesteps, num_ddpm_timesteps, verbose=True):
     return steps_out
 
 
-def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
+def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta: float, verbose: bool=True):
     # select alphas for computing the variance schedule
     alphas = alphacums[ddim_timesteps]
     alphas_prev = np.asarray([alphacums[0]] + alphacums[ddim_timesteps[:-1]].tolist())
@@ -68,7 +68,7 @@ def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
     return sigmas, alphas, alphas_prev
 
 
-def timestep_embedding(timesteps, dim, max_period=10000):
+def timestep_embedding(timesteps, dim: int, max_period: int=10000):
     """
     Create sinusoidal timestep embeddings.
     :param timesteps: a 1-D Tensor of N indices, one per batch element.

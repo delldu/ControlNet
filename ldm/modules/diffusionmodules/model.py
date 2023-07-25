@@ -382,9 +382,12 @@ class Encoder(nn.Module):
 
         # downsampling
         hs = [self.conv_in(x)]
+        # xxxx8888
+        pdb.set_trace()
+        
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
-                h = self.down[i_level].block[i_block](hs[-1], temb)
+                h = self.down[i_level].block[i_block](hs[-1], temb) # xxxx8888
                 if len(self.down[i_level].attn) > 0:
                     h = self.down[i_level].attn[i_block](h)
                 hs.append(h)
